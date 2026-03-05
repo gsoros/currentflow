@@ -1,0 +1,129 @@
+esphome:
+  name: ceiling-fan
+  friendly_name: ceiling_fan
+  includes:
+  # This line saves the pointer to your global variable
+  on_boot:
+    priority: 800
+    then:
+      - lambda: "id(my_vesc_ptr) = id(my_vesc_hub);"
+
+esp32:
+  board: lolin32_lite
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  baud_rate: 0
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [vesc_component]
+
+sensor:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+    voltage:
+      name: "Input Voltage"
+      id: vesc_voltage
+    rpm:
+      name: "RPM"
+      id: vesc_rpm
+    duty_cycle:
+      name: "Duty Cycle"
+      id: vesc_duty_cycle
+    input_current:
+      name: "Input Current"
+      id: vesc_input_current
+    phase_current:
+      name: "Phase Current"
+      id: vesc_phase_current
+    fet_temp:
+      name: "FET Temperature"
+      id: vesc_fet_temp
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+
+uart:
+  id: esp_uart
+  tx_pin: GPIO17
+  rx_pin: GPIO16
+  baud_rate: 115200
+#debug:
+#  direction: BOTH
+#  dummy_receiver: false
+
+# Optional debug UART (uncomment if you want a separate debug port)
+# uart:
+#   - id: debug_uart
+#     tx_pin: 1
+#     rx_pin: 3
+#     baud_rate: 115200
+
+vesc_component:
+  id: my_vesc_hub
+  update_interval: 1s
+  uart: esp_uart
+  # Optional: debug serial port (must be a UARTComponent id)
+  # debug_port: debug_uart
+
+# Define the global variable to store our custom component instance
+globals:
+  - id: my_vesc_ptr
+    # Use the full namespace and the class name
+    type: esphome::vesc_component::VescComponent*
+    initial_value: "nullptr"
+
+# Controls
+number:
+  - platform: template
+    name: "Motor Target RPM"
+    id: target_rpm
+    min_value: 0
+    max_value: 476
+    step: 1
+    unit_of_measurement: "RPM"
+    mode: SLIDER
+    optimistic: true
+    set_action:
+      then:
+        - lambda: |-
+            if (id(my_vesc_ptr) != nullptr) {
+              id(my_vesc_ptr)->set_target_rpm(x);
+            }
+
+  - platform: template
+    name: "Motor Target Duty Cycle"
+    id: target_duty_cycle
+    min_value: 0.0
+    max_value: 0.5
+    step: 0.005
+    unit_of_measurement: "%"
+    mode: SLIDER
+    optimistic: true
+    set_action:
+      then:
+        - lambda: |-
+            if (id(my_vesc_ptr) != nullptr) {
+              id(my_vesc_ptr)->set_target_duty_cycle(x);
+            }
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "+yVKF7n3gKxupWNXsMz05HtMTbSaohGJO+usOoCLyLQ="
+
+ota:
+  - platform: esphome
+    password: "67ea0784bdf4766ea7f020ff7939d8c1"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+
+captive_portal:
