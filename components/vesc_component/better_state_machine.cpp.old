@@ -1,0 +1,115 @@
+#include <stdint.h>
+#include <stddef.h>
+
+// Define VESC constants
+#define VESC_MAX_PACKET_SIZE 512
+#define VESC_SHORT_START 0x02
+#define VESC_LONG_START 0x03
+#define VESC_STOP_BYTE 0x03
+
+enum ParserState { WAIT_START,
+                   READ_LENGTH,
+                   READ_EXT_LENGTH,
+                   READ_PAYLOAD };
+
+class VescUart {
+   private:
+    uint8_t rx_buffer[VESC_MAX_PACKET_SIZE];
+    size_t rx_head = 0;  // Current write position
+    size_t rx_len = 0;   // Number of bytes currently in buffer
+    ParserState state = WAIT_START;
+    size_t expected_total_len = 0;
+
+   public:
+    void parseByte(uint8_t b) {
+        // 1. Basic Overflow Guard
+        if (rx_len >= VESC_MAX_PACKET_SIZE) {
+            popByte();  // Drop oldest if full to keep searching
+        }
+
+        // 2. Add to buffer
+        rx_buffer[rx_head] = b;
+        rx_head = (rx_head + 1) % VESC_MAX_PACKET_SIZE;
+        rx_len++;
+
+        // 3. Process State Machine
+        process();
+    }
+
+    void process() {
+        switch (state) {
+            case WAIT_START:
+                if (peekByte(0) == VESC_SHORT_START) {
+                    state = READ_LENGTH;
+                } else if (peekByte(0) == VESC_LONG_START) {
+                    state = READ_EXT_LENGTH;
+                } else {
+                    popByte();  // Not a start byte, discard
+                }
+                break;
+
+            case READ_LENGTH:
+                if (rx_len >= 2) {
+                    // Length + Start(1) + Len(1) + CRC(2) + Stop(1) = +5
+                    expected_total_len = (size_t)peekByte(1) + 5;
+                    validateAndMoveToPayload();
+                }
+                break;
+
+            case READ_EXT_LENGTH:
+                if (rx_len >= 3) {
+                    // (MSB << 8 | LSB) + Start(1) + Len(2) + CRC(2) + Stop(1) = +6
+                    uint16_t payload_len = ((uint16_t)peekByte(1) << 8) | (uint16_t)peekByte(2);
+                    expected_total_len = (size_t)payload_len + 6;
+                    validateAndMoveToPayload();
+                }
+                break;
+
+            case READ_PAYLOAD:
+                if (rx_len >= expected_total_len) {
+                    if (peekByte(expected_total_len - 1) == VESC_STOP_BYTE) {
+                        finalizePacket();
+                    } else {
+                        // Malformed: the "Stop" isn't 0x03. Drop start and retry.
+                        popByte();
+                        state = WAIT_START;
+                    }
+                }
+                break;
+        }
+    }
+
+   private:
+    uint8_t peekByte(size_t index) {
+        // Safely look into circular buffer relative to the "start" of current search
+        size_t start_idx = (rx_head + VESC_MAX_PACKET_SIZE - rx_len) % VESC_MAX_PACKET_SIZE;
+        return rx_buffer[(start_idx + index) % VESC_MAX_PACKET_SIZE];
+    }
+
+    void popByte() {
+        if (rx_len > 0) rx_len--;
+    }
+
+    void validateAndMoveToPayload() {
+        if (expected_total_len > VESC_MAX_PACKET_SIZE || expected_total_len < 6) {
+            popByte();  // Invalid length logic, drop the 0x02/0x03 and reset
+            state = WAIT_START;
+        } else {
+            state = READ_PAYLOAD;
+        }
+    }
+
+    void finalizePacket() {
+        // Copy circular buffer to flat array for CRC check and Unpacking
+        uint8_t flat_packet[VESC_MAX_PACKET_SIZE];
+        for (size_t i = 0; i < expected_total_len; i++) {
+            flat_packet[i] = peekByte(i);
+        }
+
+        // Logic for unpackPayload and CRC goes here...
+
+        // Remove the processed packet from circular buffer
+        for (size_t i = 0; i < expected_total_len; i++) popByte();
+        state = WAIT_START;
+    }
+};

@@ -1,0 +1,129 @@
+int VescUart::parseByte(uint8_t b) {
+    // Append byte with overflow handling
+    if (rx_capacity == 0) return 0;
+    if (rx_len < rx_capacity) {
+        rx_buffer[rx_len++] = b;
+    } else {
+        ESP_LOGD("vesc", "RX buffer overflow");
+        if (debugPort != NULL) debugPort->println("RX buffer overflow");
+        memmove(rx_buffer, rx_buffer + 1, rx_capacity - 1);
+        rx_buffer[rx_capacity - 1] = b;
+        rx_len = rx_capacity;
+    }
+
+    switch (parser_state) {
+        case WAIT_START:
+            ESP_LOGD("vesc", "WAIT_START: Received byte 0x%02X", b);
+            if (b == 2) {
+                // Messages <= 255 start with "2", 2nd byte is length, then payload, 2 bytes CRC, and end byte "3"
+                parser_state = READ_LENGTH;
+                expected_len = 0;
+            } else if (b == 3) {
+                // Messages > 255 start with "3", 2nd and 3rd bytes are length, then payload, 2 bytes CRC, and end byte "3"
+                parser_state = READ_EXT_LENGTH;
+                expected_len = 0;
+            } else {
+                // not a start byte, drop it
+                if (rx_len > 0) {
+                    memmove(rx_buffer, rx_buffer + 1, rx_len - 1);
+                    rx_len--;
+                }
+            }
+            return 0;
+
+        case READ_LENGTH:
+            ESP_LOGD("vesc", "READ_LENGTH: Received byte 0x%02X", b);
+            // if (rx_len < 2) return 0;  // need start-byte + length-byte
+            if (rx_len >= 2) {
+                expected_len = (size_t)rx_buffer[1] + 5;
+                if (expected_len > rx_capacity) {
+                    if (debugPort != NULL) debugPort->println("Message > buffer size");
+                    // reset parser
+                    memmove(rx_buffer, rx_buffer + 1, rx_len - 1);
+                    rx_len--;
+                    parser_state = WAIT_START;
+                    expected_len = 0;
+                    return 0;
+                }
+                parser_state = READ_PAYLOAD;
+            }
+            return 0;
+
+        case READ_EXT_LENGTH:
+            ESP_LOGD("vesc", "READ_EXT_LENGTH: Received byte 0x%02X", b);
+            // if (rx_len < 3) return 0;  // need start + two length bytes
+            if (rx_len >= 3) {
+                expected_len = ((size_t)rx_buffer[1] << 8) + (size_t)rx_buffer[2] + 5;
+                ESP_LOGD("vesc", "READ_EXT_LENGTH: Calculated expected_len=%zu from bytes 0x%02X 0x%02X", expected_len, rx_buffer[1], rx_buffer[2]);
+                if (expected_len > rx_capacity) {
+                    ESP_LOGD("vesc", "READ_EXT_LENGTH: Expected length %zu exceeds buffer capacity %zu", expected_len, rx_capacity);
+                    if (debugPort != NULL) debugPort->println("Message > buffer size");
+                    memmove(rx_buffer, rx_buffer + 1, rx_len - 1);
+                    rx_len--;
+                    parser_state = WAIT_START;
+                    expected_len = 0;
+                    return 0;
+                }
+                parser_state = READ_PAYLOAD;
+            }
+            return 0;
+
+        case READ_PAYLOAD:
+            ESP_LOGD("vesc", "READ_PAYLOAD: Received byte 0x%02X, expected_len=%zu, rx_len=%zu", b, expected_len, rx_len);
+            if (expected_len == 0) return 0;
+            if (rx_len < expected_len) return 0;  // wait
+
+            // Full message available
+            if (rx_buffer[expected_len - 1] != 3) {
+                ESP_LOGD("vesc", "READ_PAYLOAD: Malformed end byte 0x%02X, expected 0x03", rx_buffer[expected_len - 1]);
+                // malformed end byte; drop first byte and reset
+                memmove(rx_buffer, rx_buffer + 1, rx_len - 1);
+                rx_len--;
+                parser_state = WAIT_START;
+                expected_len = 0;
+                return 0;
+            }
+
+            // Copy into temporary buffer for validation
+            uint8_t message[256];
+            ESP_LOGD("vesc", "READ_PAYLOAD: Copying message, len=%zu", expected_len);
+            if (expected_len > sizeof(message)) {
+                ESP_LOGD("vesc", "READ_PAYLOAD: Expected length %zu exceeds message buffer size, dropping byte and resetting parser", expected_len);
+                // unsupported size; drop start
+                memmove(rx_buffer, rx_buffer + 1, rx_len - 1);
+                rx_len--;
+                parser_state = WAIT_START;
+                expected_len = 0;
+                return 0;
+            }
+            memcpy(message, rx_buffer, expected_len);
+
+            uint8_t payload[256];
+            bool ok = unpackPayload(message, (int)expected_len, payload);
+            if (ok) {
+                ESP_LOGD("vesc", "READ_PAYLOAD: Payload unpacked successfully, processing packet...");
+                processReadPacket(payload);
+                uint16_t lenPayload = message[1];
+                // remove processed bytes
+                size_t remaining = rx_len - expected_len;
+                if (remaining > 0) {
+                    ESP_LOGD("vesc", "READ_PAYLOAD: Removing processed bytes, remaining=%zu", remaining);
+                    memmove(rx_buffer, rx_buffer + expected_len, remaining);
+                }
+                rx_len = remaining;
+                parser_state = WAIT_START;
+                expected_len = 0;
+                return (int)lenPayload;
+            }
+
+            // CRC failed: drop first byte and reset
+            ESP_LOGD("vesc", "READ_PAYLOAD: CRC failed, dropping byte and resetting parser");
+            memmove(rx_buffer, rx_buffer + 1, rx_len - 1);
+            rx_len--;
+            parser_state = WAIT_START;
+            expected_len = 0;
+            return 0;
+    }
+
+    return 0;
+}

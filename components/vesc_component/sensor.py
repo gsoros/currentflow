@@ -7,48 +7,57 @@ from . import vesc_component_ns, VescComponent
 # Use the ID from __init__.py to link sensors
 CONF_VESC_ID = "vesc_id"
 
-CONFIG_SCHEMA = cv.Schema({
-    cv.GenerateID(CONF_VESC_ID): cv.use_id(VescComponent),
-    cv.Optional("voltage"): sensor.sensor_schema(
-        unit_of_measurement=UNIT_VOLT,
-        accuracy_decimals=1,
-        state_class=STATE_CLASS_MEASUREMENT
-    ),
-    cv.Optional("rpm"): sensor.sensor_schema(
-        unit_of_measurement="RPM",
-        icon="mdi:engine",
-        accuracy_decimals=0,
-        state_class=STATE_CLASS_MEASUREMENT
-    ),
-    cv.Optional("duty_cycle"): sensor.sensor_schema(
-        unit_of_measurement="%",
-        icon="mdi:engine",
-        accuracy_decimals=3,
-        state_class=STATE_CLASS_MEASUREMENT
-    ),
-    cv.Optional("input_current"): sensor.sensor_schema(
-        unit_of_measurement=UNIT_AMPERE,
-        icon="mdi:engine",
-        accuracy_decimals=3,
-        state_class=STATE_CLASS_MEASUREMENT
-    ),
-    cv.Optional("phase_current"): sensor.sensor_schema(
-        unit_of_measurement=UNIT_AMPERE,
-        icon="mdi:engine",
-        accuracy_decimals=3,
-        state_class=STATE_CLASS_MEASUREMENT
-    ),
-    cv.Optional("fet_temp"): sensor.sensor_schema(
-        unit_of_measurement="°C",
-        icon="mdi:engine",
-        accuracy_decimals=1,
-        state_class=STATE_CLASS_MEASUREMENT
-    ),
-})
+CONFIG_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(CONF_VESC_ID): cv.use_id(VescComponent),
+        cv.Optional("voltage"): sensor.sensor_schema(
+            unit_of_measurement=UNIT_VOLT,
+            accuracy_decimals=1,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("rpm"): sensor.sensor_schema(
+            unit_of_measurement="RPM",
+            icon="mdi:engine",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("duty_cycle"): sensor.sensor_schema(
+            unit_of_measurement="%",
+            icon="mdi:engine",
+            accuracy_decimals=3,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("input_current"): sensor.sensor_schema(
+            unit_of_measurement=UNIT_AMPERE,
+            icon="mdi:engine",
+            accuracy_decimals=3,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("phase_current"): sensor.sensor_schema(
+            unit_of_measurement=UNIT_AMPERE,
+            icon="mdi:engine",
+            accuracy_decimals=3,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("fet_temp"): sensor.sensor_schema(
+            unit_of_measurement="°C",
+            icon="mdi:engine",
+            accuracy_decimals=1,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("uart_activity"): sensor.sensor_schema(
+            unit_of_measurement="Bool",
+            icon="mdi:engine",
+            accuracy_decimals=1,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+    }
+)
+
 
 async def to_code(config):
     parent = await cg.get_variable(config[CONF_VESC_ID])
-    
+
     if "voltage" in config:
         sens = await sensor.new_sensor(config["voltage"])
         cg.add(parent.set_voltage_sensor(sens))
@@ -67,3 +76,6 @@ async def to_code(config):
     if "fet_temp" in config:
         sens = await sensor.new_sensor(config["fet_temp"])
         cg.add(parent.set_fet_temp_sensor(sens))
+    if "uart_activity" in config:
+        sens = await sensor.new_sensor(config["uart_activity"])
+        cg.add(parent.set_uart_activity_sensor(sens))

@@ -15,6 +15,7 @@ esp32:
 
 # Enable logging
 logger:
+  level: DEBUG
   baud_rate: 0
 
 external_components:
@@ -23,6 +24,7 @@ external_components:
       path: components
     components: [vesc_component]
 
+# Sensors
 sensor:
   - platform: vesc_component
     vesc_id: my_vesc_hub
@@ -44,9 +46,35 @@ sensor:
     fet_temp:
       name: "FET Temperature"
       id: vesc_fet_temp
+    uart_activity:
+      name: "UART Activity"
+      id: vesc_uart_activity
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
+
+# Controls
+number:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+    rpm_control:
+      name: "Motor Target RPM"
+      id: rpm_slider
+      unit_of_measurement: "RPM"
+      mode: SLIDER
+      #optimistic: true
+      #set_action:
+      #  then:
+      #    - lambda: |-
+      #        if (id(my_vesc_ptr) != nullptr) {
+      #          id(my_vesc_ptr)->set_target_rpm(x);
+      #        }
+    current_control:
+      name: "Motor Target Current"
+      id: current_slider
+    duty_cycle_control:
+      name: "Motor Target Duty Cycle"
+      id: duty_cycle_slider
 
 uart:
   id: esp_uart
@@ -77,40 +105,6 @@ globals:
     # Use the full namespace and the class name
     type: esphome::vesc_component::VescComponent*
     initial_value: "nullptr"
-
-# Controls
-number:
-  - platform: template
-    name: "Motor Target RPM"
-    id: target_rpm
-    min_value: 0
-    max_value: 476
-    step: 1
-    unit_of_measurement: "RPM"
-    mode: SLIDER
-    optimistic: true
-    set_action:
-      then:
-        - lambda: |-
-            if (id(my_vesc_ptr) != nullptr) {
-              id(my_vesc_ptr)->set_target_rpm(x);
-            }
-
-  - platform: template
-    name: "Motor Target Duty Cycle"
-    id: target_duty_cycle
-    min_value: 0.0
-    max_value: 0.5
-    step: 0.005
-    unit_of_measurement: "%"
-    mode: SLIDER
-    optimistic: true
-    set_action:
-      then:
-        - lambda: |-
-            if (id(my_vesc_ptr) != nullptr) {
-              id(my_vesc_ptr)->set_target_duty_cycle(x);
-            }
 
 # Enable Home Assistant API
 api:
