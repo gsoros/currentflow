@@ -216,7 +216,7 @@ class VescComponent : public PollingComponent {
             return;
         }
 
-        // Pocess incoming bytes from its configured port.
+        // Process incoming bytes and update latest data when a full packet is received
         int res = vesc.processIncoming();
         if (res > 0) {
             latestData = vesc.data;
@@ -228,21 +228,25 @@ class VescComponent : public PollingComponent {
         uint32_t now = millis();
         if (now - last_send_time_ > 250) {
             if (rpm_control_->target > 10.0f) {  // Small deadzone
+                control_mode_ = 'R';
                 send_rpm_command();
                 // Clear duty cycle and current to avoid conflicts
                 duty_cycle_control_->target = 0.0f;
                 current_control_->target = 0.0f;
             } else if (duty_cycle_control_->target > 0.01f) {  // Small deadzone
+                control_mode_ = 'D';
                 send_duty_cycle_command();
                 // Clear RPM and current to avoid conflicts
                 rpm_control_->target = 0.0f;
                 current_control_->target = 0.0f;
             } else if (current_control_->target > 0.01f) {  // Small deadzone
+                control_mode_ = 'C';
                 send_current_command();
                 // Clear RPM and duty cycle to avoid conflicts
                 rpm_control_->target = 0.0f;
                 duty_cycle_control_->target = 0.0f;
             } else {
+                control_mode_ = 'N';
                 // Force 0.0 Amps (Coast) to protect the DC Source
                 vesc.setCurrent(0.0f);
             }
@@ -251,12 +255,10 @@ class VescComponent : public PollingComponent {
     }
 
     void update() override {
-        if (this->voltage_sensor_) {
-            // ESP_LOGD("vesc", "Publishing voltage: %.2f V", latestData.inpVoltage);
+        if (this->voltage_sensor_)
             this->voltage_sensor_->publish_state(latestData.inpVoltage);
-        }
         if (this->rpm_sensor_)
-            this->rpm_sensor_->publish_state(latestData.rpm / MOTOR_POLE_PAIRS);  // Mechanical RPM
+            this->rpm_sensor_->publish_state(round(latestData.rpm / MOTOR_POLE_PAIRS));  // mRPM
         if (this->duty_cycle_sensor_)
             this->duty_cycle_sensor_->publish_state(latestData.dutyCycleNow);
         if (this->input_current_sensor_)
@@ -270,7 +272,7 @@ class VescComponent : public PollingComponent {
 
         if (this->rpm_control_) {
             // ESP_LOGD("vesc", "Publishing control RPM: %.0f RPM", latestData.rpm / MOTOR_POLE_PAIRS);
-            this->rpm_control_->publish_state(latestData.rpm / MOTOR_POLE_PAIRS);  // Publish mechanical RPM for feedback
+            this->rpm_control_->publish_state(round(latestData.rpm / MOTOR_POLE_PAIRS));  // Publish mechanical RPM for feedback
         }
         if (this->duty_cycle_control_)
             this->duty_cycle_control_->publish_state(latestData.dutyCycleNow);
@@ -317,6 +319,7 @@ class VescComponent : public PollingComponent {
     UARTComponentStream* debug_adapter_{nullptr};
 
     uint32_t last_send_time_{0};
+    char control_mode_ = 'N';  // 'R' for RPM, 'D' for Duty Cycle, 'C' for Current, 'N' for None
 
 };  // class VescComponent
 

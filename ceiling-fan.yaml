@@ -15,7 +15,9 @@ esp32:
 
 # Enable logging
 logger:
-  level: DEBUG
+  #level: DEBUG
+  level: INFO
+  #level: ERROR
   baud_rate: 0
 
 external_components:
@@ -62,19 +64,16 @@ number:
       id: rpm_slider
       unit_of_measurement: "RPM"
       mode: SLIDER
-      #optimistic: true
-      #set_action:
-      #  then:
-      #    - lambda: |-
-      #        if (id(my_vesc_ptr) != nullptr) {
-      #          id(my_vesc_ptr)->set_target_rpm(x);
-      #        }
     current_control:
       name: "Motor Target Current"
       id: current_slider
+      unit_of_measurement: "A"
+      mode: SLIDER
     duty_cycle_control:
       name: "Motor Target Duty Cycle"
       id: duty_cycle_slider
+      unit_of_measurement: "%"
+      mode: SLIDER
 
 uart:
   id: esp_uart
@@ -94,7 +93,7 @@ uart:
 
 vesc_component:
   id: my_vesc_hub
-  update_interval: 1s
+  update_interval: .5s
   uart: esp_uart
   # Optional: debug serial port (must be a UARTComponent id)
   # debug_port: debug_uart
