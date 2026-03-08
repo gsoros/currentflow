@@ -1,14 +1,18 @@
 #pragma once
 
 #include "esphome/core/component.h"
-#include "esphome/components/sensor/sensor.h"  // Needed for sensor::Sensor
-#include "esphome/components/number/number.h"  // Needed for number::Number
+#include "esphome/components/sensor/sensor.h"
+#include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/number/number.h"
 #include "esphome/core/log.h"
 #include "VescUart.h"
 #include "esphome/components/uart/uart.h"
+#include "../ble_uart_component/ble_uart_component.h"
 
 namespace esphome {
 namespace vesc_component {
+
+static const char* const TAG = "vesc_component";
 
 #define MOTOR_POLE_PAIRS 21
 
@@ -17,10 +21,10 @@ class VescControlRpm : public number::Number {
     void control(float mechanical_rpm) override {
         // Hard clamp to 500 RPM limit for safety (adjust based on your setup)
         if (mechanical_rpm > 500.0f) {
-            ESP_LOGW("vesc", "Requested RPM %.0f exceeds VESC limit. Clamping to 500 RPM.", mechanical_rpm);
+            ESP_LOGW(TAG, "Requested RPM %.0f exceeds VESC limit. Clamping to 500 RPM.", mechanical_rpm);
             mechanical_rpm = 500.0f;
         } else if (mechanical_rpm < -500.0f) {
-            ESP_LOGW("vesc", "Requested RPM %.0f is below VESC limit. Clamping to -500 RPM.", mechanical_rpm);
+            ESP_LOGW(TAG, "Requested RPM %.0f is below VESC limit. Clamping to -500 RPM.", mechanical_rpm);
             mechanical_rpm = -500.0f;
         }
         target = mechanical_rpm;
@@ -34,10 +38,10 @@ class VescControlDutyCycle : public number::Number {
     void control(float duty_cycle) override {
         // Clamp duty cycle to -1% to 1% for safety
         if (duty_cycle > 1.0f) {
-            ESP_LOGW("vesc", "Requested duty cycle %.3f%% exceeds limit. Clamping to 1%%.", duty_cycle);
+            ESP_LOGW(TAG, "Requested duty cycle %.3f%% exceeds limit. Clamping to 1%%.", duty_cycle);
             duty_cycle = 1.0f;
         } else if (duty_cycle < -1.0f) {
-            ESP_LOGW("vesc", "Requested duty cycle %.3f%% is below limit. Clamping to -1%%.", duty_cycle);
+            ESP_LOGW(TAG, "Requested duty cycle %.3f%% is below limit. Clamping to -1%%.", duty_cycle);
             duty_cycle = -1.0f;
         }
         target = duty_cycle;
@@ -51,10 +55,10 @@ class VescControlCurrent : public number::Number {
     void control(float current) override {
         // Clamp current to 0A to 10A for safety (adjust based on your setup)
         if (current > 10.0f) {
-            ESP_LOGW("vesc", "Requested current %.2f A exceeds limit. Clamping to 10 A.", current);
+            ESP_LOGW(TAG, "Requested current %.2f A exceeds limit. Clamping to 10 A.", current);
             current = 10.0f;
         } else if (current < 0.0f) {
-            ESP_LOGW("vesc", "Requested current %.2f A is below limit. Clamping to 0 A.", current);
+            ESP_LOGW(TAG, "Requested current %.2f A is below limit. Clamping to 0 A.", current);
             current = 0.0f;
         }
         target = current;
@@ -112,13 +116,14 @@ class VescComponent : public PollingComponent {
     VescUart::dataPackage latestData;
     unsigned long latestDataTime = 0;
 
+   protected:
     sensor::Sensor* voltage_sensor_{nullptr};
     sensor::Sensor* rpm_sensor_{nullptr};
     sensor::Sensor* duty_cycle_sensor_{nullptr};
     sensor::Sensor* input_current_sensor_{nullptr};
     sensor::Sensor* phase_current_sensor_{nullptr};
     sensor::Sensor* fet_temp_sensor_{nullptr};
-    sensor::Sensor* uart_activity_sensor_{nullptr};
+    binary_sensor::BinarySensor* uart_activity_sensor_{nullptr};
 
     VescControlRpm* rpm_control_{nullptr};
     VescControlDutyCycle* duty_cycle_control_{nullptr};
@@ -126,6 +131,7 @@ class VescComponent : public PollingComponent {
 
     ulong setup_done = 0;
 
+   public:
     void setup() override {
         // If a UARTComponent was provided via codegen, its adapter will
         // have been created in set_uart() and vesc will already be
@@ -137,7 +143,7 @@ class VescComponent : public PollingComponent {
             // Fallback to hardware Serial2 if no UARTComponent adapter provided.
             // Keep only the fallback assignment here; avoid direct Serial2
             // operations elsewhere to prefer the adapter interface.
-            ESP_LOGW("vesc", "No uart_adapter_, using Serial2 as fallback");
+            ESP_LOGW(TAG, "No uart_adapter_, using Serial2 as fallback");
             vesc.setSerialPort(&Serial2);
         }
         setup_done = millis();
@@ -152,10 +158,10 @@ class VescComponent : public PollingComponent {
         this->uart_adapter_ = (uart != nullptr) ? new UARTComponentStream(uart) : nullptr;
         if (this->uart_adapter_) {
             vesc.setSerialPort(this->uart_adapter_);
-            ESP_LOGD("vesc", "UARTComponent provided; using it for VESC communication");
+            ESP_LOGD(TAG, "UARTComponent provided; using it for VESC communication");
         } else {
             vesc.setSerialPort(&Serial2);
-            ESP_LOGW("vesc", "No UARTComponent provided; using Serial2 as fallback. This may cause conflicts if Serial2 is used for other purposes.");
+            ESP_LOGW(TAG, "No UARTComponent provided; using Serial2 as fallback. This may cause conflicts if Serial2 is used for other purposes.");
         }
     }
 
@@ -174,17 +180,28 @@ class VescComponent : public PollingComponent {
     }
 
     void loop() override {
-        static bool first_run = true;
+        uint32_t now = millis();
 
-        if (first_run && (millis() - setup_done < 5000)) {
-            // Wait 5 seconds after setup before trying to read, to give the VESC time to boot up and respond, and the WiFi connection become established.
-            // Rate-limit this debug message to at most once per second to avoid
-            // spamming the log during early boot where loop() runs frequently.
+        // When VESC Tool is connected over BLE, it owns the UART.
+        // If we also try to read/parse UART frames here, we'll corrupt the stream.
+        // So we just bail. The bridge's loop() runs separately and handles forwarding.
+        if (ble_active_()) {
+            static uint32_t last_log_time = 0;
+            if (now - last_log_time >= 1000) {  // rate limit logs to 1 per second
+                ESP_LOGD(TAG, "BLE is active, skipping ESPHome loop to avoid UART conflicts with VESC Tool");
+                last_log_time = now;
+            }
+            return;
+        }
+
+        static bool first_run = true;
+        if (first_run && (now - setup_done < 5000)) {
+            // Wait 5 seconds after setup before trying to read, to give the VESC time to boot up and
+            // respond, and the WiFi connection become established.
             static uint32_t vesc_wait_log_last = 0;
-            uint32_t vesc_wait_log_now = millis();
-            if (vesc_wait_log_now - vesc_wait_log_last >= 1000) {
-                ESP_LOGD("vesc", "Waiting for VESC to boot and WiFi to connect...");
-                vesc_wait_log_last = vesc_wait_log_now;
+            if (now - vesc_wait_log_last >= 1000) {  // rate limit logs to 1 per second
+                ESP_LOGD(TAG, "Waiting for VESC to boot and WiFi to connect...");
+                vesc_wait_log_last = now;
             }
             if (this->uart_adapter_)
                 this->uart_adapter_->flush();
@@ -210,9 +227,8 @@ class VescComponent : public PollingComponent {
                 // Reset parser so we don't attempt to interpret leftover
                 // partial data as the start of a valid packet.
                 vesc.reset_parser();
-                ESP_LOGW("vesc", "RX buffer exceeded threshold — discarded data and reset parser");
+                ESP_LOGW(TAG, "RX buffer exceeded threshold — discarded data and reset parser");
             }
-
             return;
         }
 
@@ -225,7 +241,7 @@ class VescComponent : public PollingComponent {
 
         // Rate limit outgoing commands to at most 4 per second to avoid
         // overwhelming the VESC or the serial connection
-        uint32_t now = millis();
+        // now = millis(); // Updated at the start of loop()
         if (now - last_send_time_ > 250) {
             if (rpm_control_->target > 10.0f) {  // Small deadzone
                 control_mode_ = 'R';
@@ -255,6 +271,10 @@ class VescComponent : public PollingComponent {
     }
 
     void update() override {
+        // update() is called on a timer ('update_interval' in YAML).
+        // If VESC Tool is connected, it's doing that itself — don't interfere.
+        if (ble_active_()) return;
+
         if (this->voltage_sensor_)
             this->voltage_sensor_->publish_state(latestData.inpVoltage);
         if (this->rpm_sensor_)
@@ -268,10 +288,10 @@ class VescComponent : public PollingComponent {
         if (this->fet_temp_sensor_)
             this->fet_temp_sensor_->publish_state(latestData.tempMosfet);
         if (this->uart_activity_sensor_)
-            this->uart_activity_sensor_->publish_state((millis() - latestDataTime) < 2000 ? 1.0f : 0.0f);
+            this->uart_activity_sensor_->publish_state((millis() - latestDataTime) < 2000);
 
         if (this->rpm_control_) {
-            // ESP_LOGD("vesc", "Publishing control RPM: %.0f RPM", latestData.rpm / MOTOR_POLE_PAIRS);
+            // ESP_LOGD(TAG, "Publishing control RPM: %.0f RPM", latestData.rpm / MOTOR_POLE_PAIRS);
             this->rpm_control_->publish_state(round(latestData.rpm / MOTOR_POLE_PAIRS));  // Publish mechanical RPM for feedback
         }
         if (this->duty_cycle_control_)
@@ -279,7 +299,7 @@ class VescComponent : public PollingComponent {
         if (this->current_control_)
             this->current_control_->publish_state(latestData.avgMotorCurrent);
 
-        // ESP_LOGD("vesc", "Requesting values");
+        // ESP_LOGD(TAG, "Requesting values");
         this->vesc.requestValues();
     }
 
@@ -290,36 +310,53 @@ class VescComponent : public PollingComponent {
     void set_input_current_sensor(sensor::Sensor* s) { input_current_sensor_ = s; }
     void set_phase_current_sensor(sensor::Sensor* s) { phase_current_sensor_ = s; }
     void set_fet_temp_sensor(sensor::Sensor* s) { fet_temp_sensor_ = s; }
-    void set_uart_activity_sensor(sensor::Sensor* s) { uart_activity_sensor_ = s; }
+    void set_uart_activity_sensor(binary_sensor::BinarySensor* s) { uart_activity_sensor_ = s; }
 
     void set_rpm_control(VescControlRpm* n) { rpm_control_ = n; }
     void set_duty_cycle_control(VescControlDutyCycle* n) { duty_cycle_control_ = n; }
     void set_current_control(VescControlCurrent* n) { current_control_ = n; }
 
+    // Called from codegen to set the BLE UART component, so we can check its connection
+    // status and avoid conflicts with VESC Tool when it's active
+    void set_ble_uart_component(ble_uart_component::BleUartComponent* c) {
+        ESP_LOGD(TAG, "Setting BLE UART component: %p", c);
+        ble_uart_component_ = c;
+    }
+
     void send_rpm_command() {
         float erpm = rpm_control_->target * MOTOR_POLE_PAIRS;
-        // ESP_LOGI("vesc", "Sending RPM command: %.0f ERPM (%.0f mRPM)", erpm, target_mrpm);
+        // ESP_LOGI(TAG, "Sending RPM command: %.0f ERPM (%.0f mRPM)", erpm, target_mrpm);
         this->vesc.setRPM(erpm);
     }
 
     void send_duty_cycle_command() {
-        // ESP_LOGI("vesc", "Sending Duty Cycle command: %.3f%%", target_duty_cycle);
+        // ESP_LOGI(TAG, "Sending Duty Cycle command: %.3f%%", target_duty_cycle);
         this->vesc.setDuty(duty_cycle_control_->target);
     }
 
     void send_current_command() {
-        // ESP_LOGI("vesc", "Sending Current command: %.2f A", target_current);
+        // ESP_LOGI(TAG, "Sending Current command: %.2f A", target_current);
         this->vesc.setCurrent(current_control_->target);
     }
 
-   private:
+   protected:
     esphome::uart::UARTComponent* uart_{nullptr};
     esphome::uart::UARTComponent* debug_uart_{nullptr};
     UARTComponentStream* uart_adapter_{nullptr};
     UARTComponentStream* debug_adapter_{nullptr};
+    ble_uart_component::BleUartComponent* ble_uart_component_{nullptr};
 
     uint32_t last_send_time_{0};
     char control_mode_ = 'N';  // 'R' for RPM, 'D' for Duty Cycle, 'C' for Current, 'N' for None
+
+    bool ble_active_() const {
+        // return ble_uart_component_ != nullptr && ble_uart_component_->is_ble_connected();
+        if (ble_uart_component_ == nullptr) {
+            ESP_LOGD(TAG, "BLE UART component not set, treating BLE as inactive");
+            return false;
+        }
+        return ble_uart_component_->is_ble_connected();
+    }
 
 };  // class VescComponent
 

@@ -41,15 +41,16 @@ class VescUart {
     void setDuty(float duty, uint8_t canId = 0);
     void setCurrent(float current, uint8_t canId = 0);
     void sendKeepalive(uint8_t canId = 0);
-    // Non-blocking processor: call regularly from the main loop to feed
-    // incoming bytes and detect full messages. Returns payload length
-    // when a complete message is parsed, 0 if no complete message yet, and -1 on error (e.g. no serial port).
+    // Send a values request without blocking for the response.
+    void requestValues(uint8_t canId = 0);
+    // bool getFWVersion(uint8_t canId, char* versionBuffer, size_t bufferSize);
+    //  Non-blocking processor: call regularly from the main loop to feed
+    //  incoming bytes and detect full messages. Returns payload length
+    //  when a complete message is parsed, 0 if no complete message yet, and -1 on error (e.g. no serial port).
     int processIncoming();
     // Feed one byte into the parser. Returns payload length when a
     // complete packet is received and processed, 0 otherwise.
     int parseByte(uint8_t b);
-    // Send a values request without blocking for the response.
-    void requestValues(uint8_t canId = 0);
 
     // Configuration setters
     void set_timeout_ms(uint32_t t) { _timeout_ms = t; }

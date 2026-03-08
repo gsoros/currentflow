@@ -2,7 +2,9 @@ esphome:
   name: currentflow
   friendly_name: CurrentFlow
   includes:
-  # This line saves the pointer to your global variable
+  libraries:
+    # - ESP32 BLE Arduino
+  # This line saves the pointer to the global variable
   on_boot:
     priority: 800
     then:
@@ -13,16 +15,23 @@ esp32:
   framework:
     type: arduino
 
+esp32_ble:
+esp32_ble_tracker: # the linker will fail if this is missing, even if you don't use it directly, because the BLE library depends on it
+
 # Enable logging
 logger:
+  level: DEBUG
+  #level: INFO
+  #level: ERROR
   baud_rate: 0
 
 external_components:
   - source:
       type: local
       path: components
-    components: [vesc_component]
+    components: [vesc_component, ble_uart_component]
 
+# Sensors
 sensor:
   - platform: vesc_component
     vesc_id: my_vesc_hub
@@ -44,9 +53,32 @@ sensor:
     fet_temp:
       name: "FET Temperature"
       id: vesc_fet_temp
+    uart_activity:
+      name: "UART Activity"
+      id: vesc_uart_activity
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
+
+# Controls
+number:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+    rpm_control:
+      name: "Motor Target RPM"
+      id: rpm_slider
+      unit_of_measurement: "RPM"
+      mode: SLIDER
+    current_control:
+      name: "Motor Target Current"
+      id: current_slider
+      unit_of_measurement: "A"
+      mode: SLIDER
+    duty_cycle_control:
+      name: "Motor Target Duty Cycle"
+      id: duty_cycle_slider
+      unit_of_measurement: "%"
+      mode: SLIDER
 
 uart:
   id: esp_uart
@@ -66,8 +98,9 @@ uart:
 
 vesc_component:
   id: my_vesc_hub
-  update_interval: 1s
+  update_interval: 2s
   uart: esp_uart
+  ble_uart_component_id: my_ble_uart_component
   # Optional: debug serial port (must be a UARTComponent id)
   # debug_port: debug_uart
 
@@ -78,39 +111,10 @@ globals:
     type: esphome::vesc_component::VescComponent*
     initial_value: "nullptr"
 
-# Controls
-number:
-  - platform: template
-    name: "Motor Target RPM"
-    id: target_rpm
-    min_value: 0
-    max_value: 476
-    step: 1
-    unit_of_measurement: "RPM"
-    mode: SLIDER
-    optimistic: true
-    set_action:
-      then:
-        - lambda: |-
-            if (id(my_vesc_ptr) != nullptr) {
-              id(my_vesc_ptr)->set_target_rpm(x);
-            }
-
-  - platform: template
-    name: "Motor Target Duty Cycle"
-    id: target_duty_cycle
-    min_value: 0.0
-    max_value: 0.5
-    step: 0.005
-    unit_of_measurement: "%"
-    mode: SLIDER
-    optimistic: true
-    set_action:
-      then:
-        - lambda: |-
-            if (id(my_vesc_ptr) != nullptr) {
-              id(my_vesc_ptr)->set_target_duty_cycle(x);
-            }
+ble_uart_component:
+  id: my_ble_uart_component
+  uart_id: esp_uart # share the VESC UART bus
+  device_name: "CurrentFlow VESC" # what shows up in VESC Tool's BLE scan
 
 # Enable Home Assistant API
 api:

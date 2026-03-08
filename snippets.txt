@@ -1,0 +1,123 @@
+*** Toggle BLE Bridge
+
+switch:
+  - platform: template
+    name: "VESC Tool Bluetooth Access"
+    optimistic: true
+    on_turn_on:
+      # start_ble() should set enabled_ = true flag and startAdvertising() 
+      # _enabled is checked in loop() and onConnect()
+      lambda: 'id(my_vesc_bridge).start_ble();' 
+    on_turn_off:
+      # stop_ble() should set enabled_ = false, disconnect(), 
+      # stopAdvertising()
+      lambda: 'id(my_vesc_bridge).stop_ble();'
+
+void stop_ble() {
+    this->enabled_ = false;
+    
+    if (this->ble_connected_) {
+        // Force the phone to drop the link
+        this->ble_server_->disconnect(this->conn_id_);
+    }
+    
+    // Stop broadcasting so the device "disappears"
+    this->ble_server_->getAdvertising()->stop();
+    
+    // Reset state for next time
+    this->ble_connected_ = false;
+    this->set_mtu(23); 
+}
+
+
+
+*** EH Native Fan Component ***
+
+#include "esphome/components/fan/fan.h"
+
+namespace esphome {
+namespace currentflow {
+
+class VescFan : public fan::Fan, public Component {
+ public:
+  // Define what your fan can do (speed, direction, etc.)
+  fan::FanTraits get_traits() override {
+    auto traits = fan::FanTraits();
+    traits.set_speed(true);
+    traits.set_direction(true);
+    return traits;
+  }
+
+  void control(const fan::FanCall &call) override {
+    if (call.get_state().has_value()) {
+      this->state = *call.get_state();
+    }
+    if (call.get_speed().has_value()) {
+      this->speed = *call.get_speed(); // 0 to 100 percentage
+    }
+    if (call.get_direction().has_value()) {
+      this->direction = *call.get_direction();
+    }
+
+    this->write_state_to_vesc();
+    this->publish_state();
+  }
+
+  void write_state_to_vesc() {
+    if (!this->state || this->speed == 0) {
+      // Send COMM_SET_DUTY 0 or COMM_SET_CURRENT 0 to VESC
+      return;
+    }
+
+    // Example: Map 0-100% speed to VESC RPM or Duty Cycle
+    float vesc_val = this->speed / 100.0f; 
+    if (this->direction == fan::FanDirection::REVERSE) {
+      vesc_val *= -1;
+    }
+    
+    // Call your existing UART command function here
+    // this->parent_->set_duty_cycle(vesc_val);
+  }
+};
+
+} // namespace currentflow
+} // namespace esphome
+
+
+
+*** Buffered TX ***
+
+static const size_t MAX_BUFFER = 512;
+uint8_t buffer[MAX_BUFFER];
+size_t index = 0;
+uint32_t last_byte_time = 0;
+
+void loop() override {
+    // 1. Determine current safe chunk size (MTU - 3 bytes header)
+    size_t current_mtu = pServer->getPeerMTU(pServer->getConnId()) - 3;
+    // Fallback if not connected or negotiated yet
+    if (current_mtu > MAX_BUFFER || current_mtu < 20) current_mtu = 20;
+
+    // 2. Collect bytes
+    while (this->available() && index < MAX_BUFFER) {
+        buffer[index++] = this->read();
+        last_byte_time = millis();
+
+        // Flush immediately if we hit the current MTU limit
+        if (index >= current_mtu) {
+            flush_buffer(index);
+        }
+    }
+
+    // 3. Timeout: Flush partial packets after 15ms of silence
+    if (index > 0 && (millis() - last_byte_time > 15)) {
+        flush_buffer(index);
+    }
+}
+
+void flush_buffer(size_t length) {
+    if (pServer->getConnectedCount() <= 0) return;
+    pCharacteristic->setValue(buffer, length);
+    pCharacteristic->notify();
+    index = 0;
+}

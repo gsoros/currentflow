@@ -24,7 +24,7 @@ int VescUart::processIncoming() {
     // stateful parser and lets callers feed bytes either from a Stream or from
     // an external loop.
     if (serialPort->available()) {
-        // ESP_LOGD("vesc", "Processing incoming data from serial port...");
+        // ESP_LOGD("VescUart", "Processing incoming data from serial port...");
     }
     while (serialPort->available()) {
         int b = serialPort->read();
@@ -55,10 +55,13 @@ int VescUart::processByte() {
     switch (state) {
         case WAIT_START:
             if (peekByte(0) == VESC_SHORT_START) {
+                // ESP_LOGD("VescUart", "WAIT_START: Detected short packet start");
                 state = READ_LENGTH;
             } else if (peekByte(0) == VESC_LONG_START) {
+                // ESP_LOGD("VescUart", "WAIT_START: Detected long packet start");
                 state = READ_EXT_LENGTH;
             } else {
+                // ESP_LOGD("VescUart", "WAIT_START: Not a start byte, discarding");
                 popByte();  // Not a start byte, discard
             }
             break;
@@ -68,7 +71,7 @@ int VescUart::processByte() {
                 // Length + Start(1) + Len(1) + CRC(2) + Stop(1) = +5
                 expected_payload_len = (size_t)peekByte(1);
                 expected_total_len = expected_payload_len + 5;
-                // ESP_LOGD("vesc", "READ_LENGTH: Detected short packet with payload length %d, expecting total length %d", peekByte(1), expected_total_len);
+                // ESP_LOGD("VescUart", "READ_LENGTH: Detected short packet with payload length %d, expecting total length %d", peekByte(1), expected_total_len);
                 validateAndMoveToPayload();
             }
             break;
@@ -78,7 +81,7 @@ int VescUart::processByte() {
                 // (MSB << 8 | LSB) + Start(1) + Len(2) + CRC(2) + Stop(1) = +6
                 expected_payload_len = (size_t)((uint16_t)peekByte(1) << 8) | (uint16_t)peekByte(2);
                 expected_total_len = expected_payload_len + 6;
-                ESP_LOGD("vesc", "READ_EXT_LENGTH: Detected long packet with payload length %d, expecting total length %d", expected_payload_len, expected_total_len);
+                ESP_LOGD("VescUart", "READ_EXT_LENGTH: Detected long packet with payload length %d, expecting total length %d", expected_payload_len, expected_total_len);
                 validateAndMoveToPayload();
             }
             break;
@@ -127,7 +130,7 @@ int VescUart::finalizePacket() {
     uint8_t payload[VESC_MAX_PAYLOAD_SIZE];
     bool ok = unpackPayload(flat_packet, (int)expected_total_len, payload);
     if (ok) {
-        // ESP_LOGD("vesc", "READ_PAYLOAD: Payload unpacked successfully, processing...");
+        // ESP_LOGD("VescUart", "READ_PAYLOAD: Payload unpacked successfully, processing...");
         processReadPayload(payload, expected_payload_len);
 
         // Remove the processed packet from circular buffer
@@ -143,7 +146,7 @@ int VescUart::finalizePacket() {
     }
 
     // CRC failed: drop first byte and reset
-    ESP_LOGD("vesc", "READ_PAYLOAD: CRC failed, dropping byte and retrying");
+    ESP_LOGD("VescUart", "READ_PAYLOAD: CRC failed, dropping byte and retrying");
     popByte();
     state = WAIT_START;
     expected_total_len = 0;
@@ -156,7 +159,7 @@ void VescUart::reset_parser() {
     expected_total_len = 0;
     rx_len = 0;
 
-    ESP_LOGD("vesc", "Parser reset");
+    ESP_LOGD("VescUart", "Parser reset");
     if (debugPort != NULL) {
         debugPort->println("Parser reset");
     }
@@ -175,7 +178,7 @@ void VescUart::requestValues(uint8_t canId) {
 }
 
 bool VescUart::unpackPayload(uint8_t* message, int len, uint8_t* payload) {
-    // ESP_LOGD("vesc", "Unpacking payload from message of length %d", len);
+    // ESP_LOGD("VescUart", "Unpacking payload from message of length %d", len);
     // logPacket(message, (size_t)len);
 
     // COMM_PACKET_ID id = (COMM_PACKET_ID)message[0];  // First byte of payload is the packet ID, used for dispatching after CRC check
@@ -198,10 +201,10 @@ bool VescUart::unpackPayload(uint8_t* message, int len, uint8_t* payload) {
     // Calculate CRC of the extracted payload
     crcPayload = crc16(payload, message[1]);
 
-    // ESP_LOGD("vesc", "Calculated CRC: 0x%04X, Message CRC: 0x%04X", crcPayload, crcMessage);
+    // ESP_LOGD("VescUart", "Calculated CRC: 0x%04X, Message CRC: 0x%04X", crcPayload, crcMessage);
 
     if (crcPayload == crcMessage) {
-        // ESP_LOGD("vesc", "Received valid message with payload length %d", len);
+        // ESP_LOGD("VescUart", "Received valid message with payload length %d", len);
         if (debugPort != NULL) {
             debugPort->print("Received: ");
             serialPrint(message, len);
@@ -233,7 +236,7 @@ int VescUart::packSendPayload(uint8_t* payload, int len) {
     packet[count++] = (uint8_t)(crcPayload & 0xFF);
     packet[count++] = 3;
 
-    // ESP_LOGD("vesc", "Sending message with payload length %d", count);
+    // ESP_LOGD("VescUart", "Sending message with payload length %d", count);
     // logPacket(packet, (size_t)count);
 
     if (serialPort != NULL) serialPort->write(packet, count);
@@ -246,16 +249,16 @@ bool VescUart::processReadPayload(uint8_t* payload, size_t len) {
     COMM_PACKET_ID id = (COMM_PACKET_ID)payload[0];
     payload++;  // Move past ID for easier parsing of the rest of the payload
 
-    // ESP_LOGD("vesc", "Payload  without ID:");
+    // ESP_LOGD("VescUart", "Payload  without ID:");
     // logPacket(payload, len - 1);
 
     switch (id) {
         case COMM_GET_VALUES:
-            // ESP_LOGD("vesc", "Processing COMM_GET_VALUES payload, index: %d", index);
+            // ESP_LOGD("VescUart", "Processing COMM_GET_VALUES payload, index: %d", index);
             data.tempMosfet = buffer_get_float16(payload, 10.0, &index);
-            // ESP_LOGD("vesc", "Parsed tempMosfet: %f, next index: %d", data.tempMosfet, index);
+            // ESP_LOGD("VescUart", "Parsed tempMosfet: %f, next index: %d", data.tempMosfet, index);
             data.tempMotor = buffer_get_float16(payload, 10.0, &index);
-            // ESP_LOGD("vesc", "Parsed tempMotor: %f, next index: %d", data.tempMotor, index);
+            // ESP_LOGD("VescUart", "Parsed tempMotor: %f, next index: %d", data.tempMotor, index);
             data.avgMotorCurrent = buffer_get_float32(payload, 100.0, &index);
             data.avgInputCurrent = buffer_get_float32(payload, 100.0, &index);
             index += 4;  // skip id
@@ -281,7 +284,7 @@ bool VescUart::processReadPayload(uint8_t* payload, size_t len) {
             return true;
 
         default:
-            ESP_LOGD("vesc", "Received unhandled packet with ID %d, payload:", id);
+            ESP_LOGD("VescUart", "Received unhandled packet with ID %d, payload:", id);
             logPacket(payload, len);
             if (debugPort != NULL) {
                 debugPort->print("Received unhandled packet with ID ");
@@ -293,7 +296,7 @@ bool VescUart::processReadPayload(uint8_t* payload, size_t len) {
 }
 
 void VescUart::setRPM(float rpm, uint8_t canId) {
-    // ESP_LOGD("vesc", "VescUart::setRPM called with rpm: %.0f, canId: %d", rpm, canId);
+    // ESP_LOGD("VescUart", "VescUart::setRPM called with rpm: %.0f, canId: %d", rpm, canId);
     int32_t index = 0;
     int payloadSize = (canId == 0 ? 5 : 7);
     uint8_t payload[payloadSize];
