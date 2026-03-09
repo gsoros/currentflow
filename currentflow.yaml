@@ -16,13 +16,23 @@ esp32:
     type: arduino
 
 esp32_ble:
-esp32_ble_tracker: # the linker will fail if this is missing, even if you don't use it directly, because the BLE library depends on it
+
+# The linker will fail if this is missing
+# TODO Find a better way to handle this than having a dummy component in the config
+esp32_ble_tracker:
 
 # Enable logging
 logger:
-  level: DEBUG
-  #level: INFO
-  #level: ERROR
+  # Log levels (least → most noisy):
+  # NONE → ERROR → WARN → INFO → DEBUG → VERBOSE → VERY_VERBOSE
+  level: VERY_VERBOSE
+  logs:
+    #vesc: DEBUG
+    #ble_uart: DEBUG
+    sensor: WARN
+    number: WARN
+    #esp32_ble: WARN
+    api.service: WARN
   baud_rate: 0
 
 external_components:
@@ -32,6 +42,7 @@ external_components:
     components: [vesc_component, ble_uart_component]
 
 # Sensors
+
 sensor:
   - platform: vesc_component
     vesc_id: my_vesc_hub
@@ -53,14 +64,17 @@ sensor:
     fet_temp:
       name: "FET Temperature"
       id: vesc_fet_temp
-    uart_activity:
-      name: "UART Activity"
-      id: vesc_uart_activity
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
 
+binary_sensor:
+  - platform: template
+    name: "VESC UART Activity"
+    id: my_uart_activity_sensor
+
 # Controls
+
 number:
   - platform: vesc_component
     vesc_id: my_vesc_hub
@@ -79,6 +93,24 @@ number:
       id: duty_cycle_slider
       unit_of_measurement: "%"
       mode: SLIDER
+
+switch:
+  - platform: template
+    id: ble_bridge_enabled
+    name: "BLE Bridge Enabled"
+    icon: "mdi:bluetooth"
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: |-
+      return id(my_ble_uart_component).is_enabled();
+    turn_on_action:
+      lambda: id(my_ble_uart_component).set_enabled(true);
+    turn_off_action:
+      lambda: id(my_ble_uart_component).set_enabled(false);
+
+button:
+  - platform: restart
+    id: reboot
+    name: "Reboot"
 
 uart:
   id: esp_uart
@@ -101,6 +133,7 @@ vesc_component:
   update_interval: 2s
   uart: esp_uart
   ble_uart_component_id: my_ble_uart_component
+  uart_activity_sensor_id: my_uart_activity_sensor
   # Optional: debug serial port (must be a UARTComponent id)
   # debug_port: debug_uart
 
@@ -114,7 +147,7 @@ globals:
 ble_uart_component:
   id: my_ble_uart_component
   uart_id: esp_uart # share the VESC UART bus
-  device_name: "CurrentFlow VESC" # what shows up in VESC Tool's BLE scan
+  device_name: "Ceiling Fan VESC" # what shows up in VESC Tool's BLE scan
 
 # Enable Home Assistant API
 api:

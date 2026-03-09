@@ -1,6 +1,6 @@
 Goals
 ----
-Extract a minimal, well-tested, non-blocking VESC UART driver and implement a generic ESPHome Vesc component that is configurable, documented, and ready for publishing.
+Extract a minimal, well-tested, non-blocking VESC UART driver and implement a generic ESPHome Vesc component that is configurable and documented
 
 High-level milestones
 ---------------------
@@ -11,7 +11,7 @@ High-level milestones
 - Add an optional BLE UART bridge (ESP32) to proxy VESC Tool connections to the physical UART.
 - Add CI: build checks for ESPHome examples and unit tests for parser/CRC (host-buildable).
 - Write docs, examples, wiring diagrams, and publish to GitHub with clear license and attribution.
-- Consider using esp-idf instead of arduino as the framework YAML
+- Consider using esp-idf instead of arduino as the framework 
 - Handle BLE bonding/security to prevent random people from connecting to the VESC
 - Expose the fan-specific controls (like specific RPM presets) as standard ESPHome Fan components
 

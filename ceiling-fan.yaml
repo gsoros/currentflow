@@ -71,7 +71,7 @@ sensor:
 binary_sensor:
   - platform: template
     name: "VESC UART Activity"
-    id: uart_activity_sensor
+    id: my_uart_activity_sensor
 
 # Controls
 
@@ -133,7 +133,7 @@ vesc_component:
   update_interval: 2s
   uart: esp_uart
   ble_uart_component_id: my_ble_uart_component
-  uart_activity_sensor_id: uart_activity_sensor
+  uart_activity_sensor_id: my_uart_activity_sensor
   # Optional: debug serial port (must be a UARTComponent id)
   # debug_port: debug_uart
 

@@ -45,37 +45,28 @@ CONFIG_SCHEMA = cv.Schema(
             accuracy_decimals=1,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional("uart_activity"): sensor.sensor_schema(
-            unit_of_measurement="Bool",
-            icon="mdi:engine",
-            accuracy_decimals=1,
-            state_class=STATE_CLASS_MEASUREMENT,
-        ),
     }
-)
+).extend(cv.COMPONENT_SCHEMA)
 
 
 async def to_code(config):
-    parent = await cg.get_variable(config[CONF_VESC_ID])
+    var = await cg.get_variable(config[CONF_VESC_ID])
 
     if "voltage" in config:
         sens = await sensor.new_sensor(config["voltage"])
-        cg.add(parent.set_voltage_sensor(sens))
+        cg.add(var.set_voltage_sensor(sens))
     if "rpm" in config:
         sens = await sensor.new_sensor(config["rpm"])
-        cg.add(parent.set_rpm_sensor(sens))
+        cg.add(var.set_rpm_sensor(sens))
     if "duty_cycle" in config:
         sens = await sensor.new_sensor(config["duty_cycle"])
-        cg.add(parent.set_duty_cycle_sensor(sens))
+        cg.add(var.set_duty_cycle_sensor(sens))
     if "input_current" in config:
         sens = await sensor.new_sensor(config["input_current"])
-        cg.add(parent.set_input_current_sensor(sens))
+        cg.add(var.set_input_current_sensor(sens))
     if "phase_current" in config:
         sens = await sensor.new_sensor(config["phase_current"])
-        cg.add(parent.set_phase_current_sensor(sens))
+        cg.add(var.set_phase_current_sensor(sens))
     if "fet_temp" in config:
         sens = await sensor.new_sensor(config["fet_temp"])
-        cg.add(parent.set_fet_temp_sensor(sens))
-    if "uart_activity" in config:
-        sens = await sensor.new_sensor(config["uart_activity"])
-        cg.add(parent.set_uart_activity_sensor(sens))
+        cg.add(var.set_fet_temp_sensor(sens))
