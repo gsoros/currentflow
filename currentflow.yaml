@@ -147,7 +147,7 @@ globals:
 ble_uart_component:
   id: my_ble_uart_component
   uart_id: esp_uart # share the VESC UART bus
-  device_name: "Ceiling Fan VESC" # what shows up in VESC Tool's BLE scan
+  device_name: "CurrentFlow" # what shows up in VESC Tool's BLE scan
 
 # Enable Home Assistant API
 api:
