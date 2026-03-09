@@ -4,9 +4,8 @@ esphome:
   includes:
   libraries:
     # - ESP32 BLE Arduino
-  # This line saves the pointer to your global variable
   on_boot:
-    priority: 800
+    #priority: 200
     then:
       - lambda: "id(my_vesc_ptr) = id(my_vesc_hub);"
 
@@ -19,20 +18,20 @@ esp32_ble:
 
 # The linker will fail if this is missing
 # TODO Find a better way to handle this than having a dummy component in the config
-esp32_ble_tracker:
+# esp32_ble_tracker:
 
 # Enable logging
 logger:
   # Log levels (least → most noisy):
   # NONE → ERROR → WARN → INFO → DEBUG → VERBOSE → VERY_VERBOSE
-  level: VERY_VERBOSE
-  logs:
-    #vesc: DEBUG
-    #ble_uart: DEBUG
-    sensor: WARN
-    number: WARN
-    #esp32_ble: WARN
-    api.service: WARN
+  level: DEBUG
+  #logs:
+  #vesc: DEBUG
+  #ble_uart: DEBUG
+  #sensor: WARN
+  #number: WARN
+  #esp32_ble: WARN
+  #api.service: WARN
   baud_rate: 0
 
 external_components:
@@ -67,11 +66,6 @@ sensor:
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
-
-binary_sensor:
-  - platform: template
-    name: "VESC UART Activity"
-    id: my_uart_activity_sensor
 
 # Controls
 
@@ -133,9 +127,7 @@ vesc_component:
   update_interval: 2s
   uart: esp_uart
   ble_uart_component_id: my_ble_uart_component
-  uart_activity_sensor_id: my_uart_activity_sensor
-  # Optional: debug serial port (must be a UARTComponent id)
-  # debug_port: debug_uart
+  #debug_port: debug_uart
 
 # Define the global variable to store our custom component instance
 globals:
@@ -147,7 +139,7 @@ globals:
 ble_uart_component:
   id: my_ble_uart_component
   uart_id: esp_uart # share the VESC UART bus
-  device_name: "Ceiling Fan" # what shows up in VESC Tool's BLE scan
+  device_name: "Ceiling Fan" # advertised name
 
 # Enable Home Assistant API
 api:

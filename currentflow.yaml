@@ -6,7 +6,7 @@ esphome:
     # - ESP32 BLE Arduino
   # This line saves the pointer to the global variable
   on_boot:
-    priority: 800
+    #priority: 800
     then:
       - lambda: "id(my_vesc_ptr) = id(my_vesc_hub);"
 

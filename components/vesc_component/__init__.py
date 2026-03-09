@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_UPDATE_INTERVAL
-from esphome.components import uart as uart, binary_sensor
+from esphome.components import uart as uart
 import os
 
 DEPENDENCIES = ["sensor", "uart"]
@@ -27,7 +27,6 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_BLE_UART_COMPONENT_ID): cv.use_id(
             "ble_uart_component.BleUartComponent"
         ),
-        cv.Optional("uart_activity_sensor_id"): cv.use_id(binary_sensor.BinarySensor),
     }
 ).extend(cv.polling_component_schema("1s"))
 
@@ -54,12 +53,9 @@ async def to_code(config):
     if CONF_UPDATE_INTERVAL in config:
         cg.add(var.set_update_interval(config[CONF_UPDATE_INTERVAL]))
 
-    ble_uart_obj = await cg.get_variable(config[CONF_BLE_UART_COMPONENT_ID])
-    cg.add(var.set_ble_uart_component(ble_uart_obj))
-
-    if "uart_activity_sensor_id" in config:
-        sens = await cg.get_variable(config["uart_activity_sensor_id"])
-        cg.add(var.set_uart_activity_sensor(sens))
+    if CONF_BLE_UART_COMPONENT_ID in config:
+        ble_uart_obj = await cg.get_variable(config[CONF_BLE_UART_COMPONENT_ID])
+        cg.add(var.set_ble_uart_component(ble_uart_obj))
 
     # This tells the compiler to look inside the current component folder for headers like datatypes.h
     cg.add_build_flag("-I" + os.path.dirname(__file__))

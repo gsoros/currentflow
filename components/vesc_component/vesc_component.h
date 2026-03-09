@@ -2,7 +2,6 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/number/number.h"
 #include "esphome/core/log.h"
 #include "VescUart.h"
@@ -123,7 +122,6 @@ class VescComponent : public PollingComponent {
     sensor::Sensor* input_current_sensor_{nullptr};
     sensor::Sensor* phase_current_sensor_{nullptr};
     sensor::Sensor* fet_temp_sensor_{nullptr};
-    binary_sensor::BinarySensor* uart_activity_sensor_{nullptr};
 
     VescControlRpm* rpm_control_{nullptr};
     VescControlDutyCycle* duty_cycle_control_{nullptr};
@@ -287,8 +285,6 @@ class VescComponent : public PollingComponent {
             this->phase_current_sensor_->publish_state(latestData.avgMotorCurrent);
         if (this->fet_temp_sensor_)
             this->fet_temp_sensor_->publish_state(latestData.tempMosfet);
-        if (this->uart_activity_sensor_)
-            this->uart_activity_sensor_->publish_state((millis() - latestDataTime) < 2000);
 
         if (this->rpm_control_) {
             // ESP_LOGD(TAG, "Publishing control RPM: %.0f RPM", latestData.rpm / MOTOR_POLE_PAIRS);
@@ -310,7 +306,6 @@ class VescComponent : public PollingComponent {
     void set_input_current_sensor(sensor::Sensor* s) { input_current_sensor_ = s; }
     void set_phase_current_sensor(sensor::Sensor* s) { phase_current_sensor_ = s; }
     void set_fet_temp_sensor(sensor::Sensor* s) { fet_temp_sensor_ = s; }
-    void set_uart_activity_sensor(binary_sensor::BinarySensor* s) { uart_activity_sensor_ = s; }
 
     void set_rpm_control(VescControlRpm* n) { rpm_control_ = n; }
     void set_duty_cycle_control(VescControlDutyCycle* n) { duty_cycle_control_ = n; }
