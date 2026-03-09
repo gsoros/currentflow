@@ -1,6 +1,7 @@
 #include "ble_uart_component.h"
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"  // for App.get_name()
+// #include "esp_bt.h"
 
 namespace esphome {
 namespace ble_uart_component {
@@ -15,12 +16,16 @@ void BleUartComponent::setup() {
         this->device_name_ = App.get_name();
     }
     ESP_LOGI(TAG, "Starting BLE as '%s'", this->device_name_.c_str());
-    BLEDevice::init(String(this->device_name_.c_str()));
+
+    if (!NimBLEDevice::init(this->device_name_)) ESP_LOGE(TAG, "BLE init failed");
+    // delay(200);  // DEBUG TEST
+
+    ESP_LOGD(TAG, "Controller status: %d", esp_bt_controller_get_status());
 
     // Bump MTU so VESC Tool can send bigger packets (default 23 bytes is painful)
-    BLEDevice::setMTU(512);
+    if (!NimBLEDevice::setMTU(517)) ESP_LOGE(TAG, "BLE setMTU failed");
 
-    ble_server_ = BLEDevice::createServer();
+    ble_server_ = NimBLEDevice::createServer();
     ble_server_->setCallbacks(&server_callbacks_);
 
     // Create the Nordic UART Service
@@ -29,37 +34,38 @@ void BleUartComponent::setup() {
     // TX characteristic: ESP → Phone (NOTIFY)
     tx_char_ = nus->createCharacteristic(
         NUS_TX_CHAR_UUID,
-        BLECharacteristic::PROPERTY_NOTIFY);
-    // BLE2902 is the Client Characteristic Configuration Descriptor.
-    // Without it, notifications don't work. Annoying but mandatory.
-    tx_char_->addDescriptor(new BLE2902());
+        NIMBLE_PROPERTY::NOTIFY);
+    // tx_char_->addDescriptor(new NimBLE2902()); // Handled by Nimble automatically
 
     // RX characteristic: Phone → ESP (WRITE)
     rx_char_ = nus->createCharacteristic(
         NUS_RX_CHAR_UUID,
-        BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+        NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
     rx_char_->setCallbacks(&rx_callbacks_);
 
-    nus->start();
+    if (!nus->start()) ESP_LOGE(TAG, "NUS start failed");
 
     // Advertise so VESC Tool (or any NUS scanner) can find us
-    BLEAdvertising* adv = BLEDevice::getAdvertising();
+    auto adv = ble_server_->getAdvertising();
+    adv->setName(this->device_name_);
+    adv->setAppearance(0x0240);  // Generic Keyring
     adv->addServiceUUID(NUS_SERVICE_UUID);
-    adv->setScanResponse(true);  // Needed to send the full device name in scan
-    adv->setMinPreferred(0x06);  // These two help with iPhone connection stability
-    adv->setMinPreferred(0x12);
-    BLEDevice::startAdvertising();
+    adv->enableScanResponse(true);  // Needed to send the full device name in scan
+    // Set the preferred connection interval range (Min, Max)
+    // 7.5ms to 22.5ms (very fast for VESC telemetry, if your HW can do it)
+    // adv->setMinInterval(0x06);
+    // adv->setMaxInterval(0x12);
+    // 100ms to 150ms (industry standard for reliable discovery)
+    adv->setMinInterval(0xA0);
+    adv->setMaxInterval(0xF0);
 
-    ESP_LOGI(TAG, "BLE advertising started");
+    ble_server_->start();
+
+    ESP_LOGD(TAG, "setup() done");
 }
 
 /*
 // This version sends multiple packets per loop
-void BleUartComponent::loop() {
-    if (!connected_count_) return;  // Don't do anything if we're not connected
-
-    size_t available = this->available();
-    if (available == 0) return;
 
     uint8_t packets_sent = 0;
     while (available && connected_count_) {
@@ -82,26 +88,35 @@ void BleUartComponent::loop() {
         }
         ESP_LOGD(TAG, "Packets sent in this loop: %d, %dB remaining", packets_sent, available);
     }
-}
+
 */
 
 void BleUartComponent::loop() {
-    if (!this->enabled_ || !this->connected_count_) return;
+    if (!this->enabled_) return;
+
+    if (this->defer_start_ && millis() > 3000) {
+        // apply saved state after 3 seconds
+        // this will start advertising if necessary
+        this->defer_start_ = false;
+        this->set_enabled(this->enabled_);
+        ESP_LOGD(TAG, "Controller status: %d", esp_bt_controller_get_status());
+    }
+
+    if (!this->connected_count_) return;
 
     size_t available = this->available();
     if (available == 0) return;
 
-    size_t to_read = std::min(available, current_mtu_payload_size_);
+    size_t to_read = std::min(available, (size_t)current_mtu_payload_size_);
 
-    std::vector<uint8_t> chunk;
-    while (this->available() > 0 && chunk.size() < to_read) {
-        chunk.push_back(this->read());
-    }
+    uint8_t buffer[to_read];
+    this->read_array(buffer, to_read);
 
-    this->tx_char_->setValue(chunk.data(), chunk.size());
-    this->tx_char_->notify();
+    // Use notify(data, len) instead of setValue + notify
+    // This is more efficient in NimBLE v2.x
+    this->tx_char_->notify(buffer, to_read);
 
-    ESP_LOGD(TAG, "Sent %d bytes over BLE, %d bytes remaining in UART buffer", chunk.size(), this->available());
+    ESP_LOGD(TAG, "Sent %d bytes over BLE, %d bytes remaining in UART buffer", to_read, this->available());
 }
 
 void BleUartComponent::set_mtu(size_t mtu) {

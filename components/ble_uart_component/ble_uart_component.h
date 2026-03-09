@@ -2,10 +2,7 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/uart/uart.h"
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <NimBLEDevice.h>
 
 namespace esphome {
 namespace ble_uart_component {
@@ -20,7 +17,6 @@ static const char* const TAG = "ble_uart_component";
 
 class BleUartComponent : public Component, public uart::UARTDevice {
    public:
-    // ---- Lifecycle ----
     void setup() override;
     void loop() override;
 
@@ -34,32 +30,41 @@ class BleUartComponent : public Component, public uart::UARTDevice {
     }
 
     bool is_enabled() const { return enabled_; }
+
+    // ---- Public API for Python/YAML codegen ----
+    // Sets the BLE state and start advertising, if necessary
+    // Disconnects all clients if disabled
     void set_enabled(bool state) {
         this->enabled_ = state;
-        ESP_LOGI(TAG, "State: %s", state ? "ENABLED" : "DISABLED");
+        ESP_LOGI(TAG, "Requested state: %s", state ? "ENABLED" : "DISABLED");
 
+        if (this->defer_start_) {
+            ESP_LOGD(TAG, "Defer start active, not starting advertising");
+            return;
+        }
+        if (!this->ble_server_) {
+            ESP_LOGD(TAG, "BLE not ready");
+            return;
+        }
         if (this->is_enabled()) {
-            // Start advertising if toggled ON
-            // this->ble_server_->get_advertising()->start();
-            BLEDevice::startAdvertising();
-            ESP_LOGD(TAG, "Advertising started.");
-        } else {
-            // 2. Disconnect ALL existing peers
-            for (auto& kv : ble_server_->getPeerDevices(true)) {
-                ESP_LOGI(TAG, "Disconnecting client");
-                ble_server_->disconnect(kv.first);  // kv.first is the connId
-            }
+            this->startAdvertising();
+            return;
+        }
+        for (auto conn_handle : ble_server_->getPeerDevices()) {
+            ESP_LOGI(TAG, "Disconnecting client %d", conn_handle);
+            ble_server_->disconnect(conn_handle);
         }
     }
 
    protected:
     std::string device_name_{"VESC BLE Bridge"};
-    bool enabled_ = true;  // Default to ON
+    bool enabled_ = true;      // Default to ON
+    bool defer_start_ = true;  // If true, startAdvertising() is deferred
 
-    BLEServer* ble_server_{nullptr};
-    BLECharacteristic* tx_char_{nullptr};  // ESP → Phone
-    BLECharacteristic* rx_char_{nullptr};  // Phone → ESP
-    BLEService* nus{nullptr};              // Nordic UART Service
+    NimBLEServer* ble_server_{nullptr};
+    NimBLECharacteristic* tx_char_{nullptr};  // ESP → Phone
+    NimBLECharacteristic* rx_char_{nullptr};  // Phone → ESP
+    NimBLEService* nus{nullptr};              // Nordic UART Service
 
     size_t conn_id_{0};  // ID of the current BLE connection, if any
     void set_conn_id(size_t id) { conn_id_ = id; }
@@ -69,15 +74,15 @@ class BleUartComponent : public Component, public uart::UARTDevice {
     void set_mtu(size_t mtu);
 
     // Callbacks are inner classes so they can access our private members
-    class ServerCallbacks : public BLEServerCallbacks {
+    class ServerCallbacks : public NimBLEServerCallbacks {
        public:
         BleUartComponent* parent_;
 
-        void onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t* param) override {
+        void onConnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo) override {
             // 1. Immediate check: If we already have a connection, kill the intruder.
             if (parent_->connected_count_ >= 1 || !parent_->is_enabled()) {
-                pServer->disconnect(param->connect.conn_id);
-                ESP_LOGW(TAG, "Rejected client (conn_id: %d)", param->connect.conn_id);
+                pServer->disconnect(connInfo.getConnHandle());
+                ESP_LOGW(TAG, "Rejected client");
                 return;
             }
 
@@ -86,61 +91,101 @@ class BleUartComponent : public Component, public uart::UARTDevice {
                 // Double-check we haven't disconnected in the few ms it took to defer
                 if (parent_->connected_count_ == 0) {
                     parent_->set_connected_count(1);
-                    // BLEDevice::getAdvertising()->stop();
-                    BLEDevice::stopAdvertising();
-                    ESP_LOGI(TAG, "Connection accepted. Advertising stopped.");
+                    ESP_LOGI(TAG, "Connection accepted.");
+                    parent_->stopAdvertising();
                 }
             });
         }
-        void onDisconnect(BLEServer* pServer) override {
-            if (!parent_->is_enabled()) {
-                BLEDevice::stopAdvertising();
-                // parent_->ble_server_->get_advertising()->stop();
-                ESP_LOGD("ble", "Client disconnected; BLE is disabled: not advertising");
-            }
-            // 1. Flush UART incoming buffer
-            // parent_->flush_input();
+        void onDisconnect(NimBLEServer* pServer, NimBLEConnInfo& connInfo, int reason) override {
+            ESP_LOGI(TAG, "Client disconnected; reason: %d", reason);
+            if (!parent_->is_enabled())
+                parent_->stopAdvertising();
 
-            // 2. Set count to 0 so the loop knows we are disconnected
+            // Set count to 0 so the loop knows we are disconnected
             parent_->set_connected_count(0);
 
-            // 3. Wait 300ms before restarting BLE to let WiFi/API catch up
+            // Wait 300ms before restarting advertising
             parent_->set_timeout("restart_ble_adv", 300, [this]() {
                 if (!parent_->is_enabled()) return;
-                // One last flush just in case the VESC sent more junk
-                parent_->flush_input();
-                BLEDevice::startAdvertising();
-                // parent_->ble_server_->get_advertising()->start();
-                ESP_LOGI(TAG, "Advertising started.");
+                if (!parent_->startAdvertising())
+                    ESP_LOGW(TAG, "Failed to restart advertising");
             });
         }
-        void onMtuChanged(BLEServer* pServer, esp_ble_gatts_cb_param_t* param) override {
-            if (param->mtu.mtu > 23) {
-                ESP_LOGI(TAG, "MTU changed to %d", param->mtu.mtu);
-                parent_->set_mtu((size_t)param->mtu.mtu);
+
+        void onMTUChange(uint16_t MTU, NimBLEConnInfo& connInfo) override {
+            if (MTU > 23) {
+                ESP_LOGI(TAG, "MTU changed to %d", MTU);
+                parent_->set_mtu((size_t)MTU);
             }
         }
     };
 
-    class RxCallbacks : public BLECharacteristicCallbacks {
+    class RxCallbacks : public NimBLECharacteristicCallbacks {
        public:
         BleUartComponent* parent_;
         // VESC Tool wrote something → forward it to the physical UART
-        void onWrite(BLECharacteristic* characteristic) override {
-            uint8_t* rawData = characteristic->getData();
-            size_t len = characteristic->getLength();
-            ESP_LOGD(TAG, "onWrite() Received %d bytes via BLE", len);
-            if (rawData != nullptr && len > 0) {
-                // Flush UART incoming buffer to give a chance for the reply
-                // to go through in case of telemetry flood.
-                parent_->flush_input();
-                parent_->write_array(rawData, len);
-            }
+        void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& connInfo) override {
+            NimBLEAttValue val = c->getValue();
+            ESP_LOGD(TAG, "onWrite() Received %d bytes via BLE", val.length());
+            if (val.length() <= 0) return;
+            // Flush UART incoming buffer to give a chance for the reply
+            // to go through in case of telemetry flood.
+            parent_->flush_input();
+            parent_->write_array(val.data(), val.length());
         }
     };
 
     ServerCallbacks server_callbacks_;
     RxCallbacks rx_callbacks_;
+
+    bool startAdvertising() {
+        if (!this->is_enabled()) {
+            ESP_LOGD(TAG, "BLE is disabled: not advertising");
+            return false;
+        }
+        if (!this->ble_server_) {
+            ESP_LOGW(TAG, "BLE not ready");
+            return false;
+        }
+        auto adv = this->ble_server_->getAdvertising();
+        if (!adv) {
+            ESP_LOGW(TAG, "BLE adv not ready");
+            return false;
+        }
+        if (adv->isAdvertising()) {
+            ESP_LOGD(TAG, "Already advertising");
+            return false;
+        }
+
+        bool ret = adv->start();
+        if (ret)
+            ESP_LOGI(TAG, "Advertising started.");
+        else
+            ESP_LOGE(TAG, "Advertising failed");
+        return ret;
+    }
+
+    bool stopAdvertising() {
+        if (!this->ble_server_) {
+            ESP_LOGW(TAG, "BLE not ready");
+            return false;
+        }
+        auto adv = this->ble_server_->getAdvertising();
+        if (!adv) {
+            ESP_LOGW(TAG, "BLE adv not ready");
+            return false;
+        }
+        if (!adv->isAdvertising()) {
+            ESP_LOGD(TAG, "Not advertising");
+            return false;
+        }
+        bool ret = adv->stop();
+        if (ret)
+            ESP_LOGI(TAG, "Advertising stopped.");
+        else
+            ESP_LOGE(TAG, "Advertising stop failed");
+        return ret;
+    }
 
     void flush_input() {
         if (!this->available()) return;
