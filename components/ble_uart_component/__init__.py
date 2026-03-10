@@ -1,9 +1,8 @@
 import esphome.codegen as cg  # C++ code generator
-import esphome.config_validation as cv  # YAML validator
 from esphome.components import uart  # For the UART mixin
-from esphome.const import CONF_ID  # The 'id:' key every component has
-
 from esphome.components.esp32 import add_idf_sdkconfig_option
+import esphome.config_validation as cv  # YAML validator
+from esphome.const import CONF_ID  # The 'id:' key every component has
 
 # Declare our C++ namespace and class.
 # This must exactly match the namespace/class in your .h file.
@@ -33,9 +32,7 @@ CONFIG_SCHEMA = cv.Schema(
         ),  # auto-generate C++ variable name if not given
         cv.Optional(CONF_DEVICE_NAME, default="VESC BLE UART Bridge"): cv.string,
     }
-).extend(
-    uart.UART_DEVICE_SCHEMA
-)  # ← this bolt-on adds the 'uart_id' key
+).extend(uart.UART_DEVICE_SCHEMA)  # ← this bolt-on adds the 'uart_id' key
 
 
 # to_code is called by ESPHome's build system to EMIT C++ code.

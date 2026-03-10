@@ -15,6 +15,7 @@ esphome:
       #- -DCONFIG_BT_NIMBLE_ROLE_PERIPHERAL=1 # Force enable peripheral role
       #- -DARDUINO_USB_CDC_ON_BOOT=1          # Helps if logs are trapped in the internal buffer
       #- -DARDUINO_USB_CDC_ON_BOOT=0
+      - -DUSE_NIMBLE
       - -DCONFIG_BT_ENABLED=1
       - -DCONFIG_BT_NIMBLE_ENABLED=1
       - -DCONFIG_BT_CONTROLLER_ENABLED=1
@@ -25,12 +26,10 @@ esphome:
       #- -DCONFIG_BT_NIMBLE_HCI_EVT_LO_BUF_COUNT=8
       #- -DCONFIG_BT_NIMBLE_MSYS1_BLOCK_COUNT=16
 
-
 esp32:
   board: lolin32_lite
   framework:
     type: arduino
-
 
 logger:
   # Log levels (least → most noisy):
@@ -43,7 +42,7 @@ logger:
     number: WARN
     #esp32_ble: WARN
     #api.service: WARN
-  baud_rate: 0 #disabled 
+  baud_rate: 0 #disabled
   #baud_rate: 115200
 
 external_components:
