@@ -23,7 +23,7 @@ Example telemetry values that can be exposed:
 * Duty cycle
 * FET Temperature
 
-## Example ESPHome Configuration  
+## Example ESPHome Configuration
 
 *TODO provide a working example*
 
@@ -83,11 +83,20 @@ The implementation in this project has been **significantly modified**, includin
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
 
-Because this project incorporates and derives from GPL-licensed code from the VESC ecosystem, it must also be distributed under GPL-compatible terms.
+Portions of this code are derived from:
 
-See the `LICENSE` file for details.
+- VESC BLDC Firmware — https://github.com/vedderb/bldc
+  Copyright (c) Benjamin Vedder
+
+- VescUart Library — https://github.com/SolidGeek/VescUart
+  Copyright (c) SolidGeek
+
+Modifications include refactoring for ESPHome and conversion to a non-blocking
+implementation compatible with ESPHome’s execution model.
+
+See the LICENSE file for full details.
 
 ## Acknowledgements
 
