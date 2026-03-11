@@ -1,8 +1,9 @@
 import esphome.codegen as cg
+from esphome.components import sensor, text_sensor
 import esphome.config_validation as cv
-from esphome.components import sensor
-from esphome.const import UNIT_VOLT, UNIT_AMPERE, STATE_CLASS_MEASUREMENT
-from . import vesc_component_ns, VescComponent
+from esphome.const import STATE_CLASS_MEASUREMENT, UNIT_AMPERE, UNIT_VOLT, UNIT_WATT
+
+from . import VescComponent
 
 # Use the ID from __init__.py to link sensors
 CONF_VESC_ID = "vesc_id"
@@ -13,37 +14,47 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional("voltage"): sensor.sensor_schema(
             unit_of_measurement=UNIT_VOLT,
             accuracy_decimals=1,
+            icon="mdi:flash-triangle-outline",
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional("rpm"): sensor.sensor_schema(
             unit_of_measurement="RPM",
-            icon="mdi:engine",
+            icon="mdi:rotate-360",
             accuracy_decimals=0,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional("duty_cycle"): sensor.sensor_schema(
+        cv.Optional("duty"): sensor.sensor_schema(
             unit_of_measurement="%",
-            icon="mdi:engine",
+            icon="mdi:hammer",
             accuracy_decimals=3,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional("input_current"): sensor.sensor_schema(
             unit_of_measurement=UNIT_AMPERE,
-            icon="mdi:engine",
+            icon="mdi:waves-arrow-left",
             accuracy_decimals=3,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional("phase_current"): sensor.sensor_schema(
             unit_of_measurement=UNIT_AMPERE,
-            icon="mdi:engine",
+            icon="mdi:waves-arrow-right",
             accuracy_decimals=3,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
         cv.Optional("fet_temp"): sensor.sensor_schema(
             unit_of_measurement="°C",
-            icon="mdi:engine",
+            icon="mdi:thermometer",
             accuracy_decimals=1,
             state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("wattage"): sensor.sensor_schema(
+            unit_of_measurement=UNIT_WATT,
+            icon="mdi:arm-flex",
+            accuracy_decimals=3,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional("control_mode"): text_sensor.text_sensor_schema(
+            icon="mdi:electric-switch",
         ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
@@ -58,9 +69,9 @@ async def to_code(config):
     if "rpm" in config:
         sens = await sensor.new_sensor(config["rpm"])
         cg.add(var.set_rpm_sensor(sens))
-    if "duty_cycle" in config:
-        sens = await sensor.new_sensor(config["duty_cycle"])
-        cg.add(var.set_duty_cycle_sensor(sens))
+    if "duty" in config:
+        sens = await sensor.new_sensor(config["duty"])
+        cg.add(var.set_duty_sensor(sens))
     if "input_current" in config:
         sens = await sensor.new_sensor(config["input_current"])
         cg.add(var.set_input_current_sensor(sens))
@@ -70,3 +81,10 @@ async def to_code(config):
     if "fet_temp" in config:
         sens = await sensor.new_sensor(config["fet_temp"])
         cg.add(var.set_fet_temp_sensor(sens))
+    if "wattage" in config:
+        sens = await sensor.new_sensor(config["wattage"])
+        cg.add(var.set_wattage_sensor(sens))
+    if "control_mode" in config:
+        conf = config["control_mode"]
+        sens = await text_sensor.new_text_sensor(conf)
+        cg.add(var.set_fault_code_text_sensor(sens))

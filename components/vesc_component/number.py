@@ -1,14 +1,15 @@
 import esphome.codegen as cg
-import esphome.config_validation as cv
-from esphome import automation
 from esphome.components import number
-from . import vesc_component_ns, VescComponent
+import esphome.config_validation as cv
+from esphome.const import CONF_MAX_VALUE, CONF_MIN_VALUE, CONF_STEP
+
+from . import VescComponent, vesc_component_ns
 
 # Use the ID from __init__.py to link numbers
 CONF_VESC_ID = "vesc_id"
 
 VescControlRpm = vesc_component_ns.class_("VescControlRpm", number.Number)
-VescControlDutyCycle = vesc_component_ns.class_("VescControlDutyCycle", number.Number)
+VescControlDuty = vesc_component_ns.class_("VescControlDuty", number.Number)
 VescControlCurrent = vesc_component_ns.class_("VescControlCurrent", number.Number)
 
 CONFIG_SCHEMA = cv.Schema(
@@ -18,21 +19,27 @@ CONFIG_SCHEMA = cv.Schema(
             VescControlRpm,
         ).extend(
             {
-                cv.GenerateID(): cv.declare_id(VescControlRpm),
+                cv.Optional("min_value", default=-500.0): cv.float_,
+                cv.Optional("max_value", default=500.0): cv.float_,
+                cv.Optional("step", default=5.0): cv.float_,
             }
         ),
         cv.Optional("current_control"): number.number_schema(
             VescControlCurrent,
         ).extend(
             {
-                cv.GenerateID(): cv.declare_id(VescControlCurrent),
+                cv.Optional("min_value", default=-10.0): cv.float_,
+                cv.Optional("max_value", default=10.0): cv.float_,
+                cv.Optional("step", default=0.1): cv.float_,
             }
         ),
-        cv.Optional("duty_cycle_control"): number.number_schema(
-            VescControlDutyCycle,
+        cv.Optional("duty_control"): number.number_schema(
+            VescControlDuty,
         ).extend(
             {
-                cv.GenerateID(): cv.declare_id(VescControlDutyCycle),
+                cv.Optional("min_value", default=-2.0): cv.float_,
+                cv.Optional("max_value", default=2.0): cv.float_,
+                cv.Optional("step", default=0.02): cv.float_,
             }
         ),
     }
@@ -42,27 +49,17 @@ CONFIG_SCHEMA = cv.Schema(
 async def to_code(config):
     var = await cg.get_variable(config[CONF_VESC_ID])
 
-    if "rpm_control" in config:
-        num = await number.new_number(
-            config["rpm_control"],
-            min_value=0,
-            max_value=476,
-            step=1,
-        )
-        cg.add(var.set_rpm_control(num))
-    if "current_control" in config:
-        num = await number.new_number(
-            config["current_control"],
-            min_value=0,
-            max_value=1.25,
-            step=0.005,
-        )
-        cg.add(var.set_current_control(num))
-    if "duty_cycle_control" in config:
-        num = await number.new_number(
-            config["duty_cycle_control"],
-            min_value=0,
-            max_value=0.5,
-            step=0.005,
-        )
-        cg.add(var.set_duty_cycle_control(num))
+    for key, setter in [
+        ("rpm_control", var.set_rpm_control),
+        ("current_control", var.set_current_control),
+        ("duty_control", var.set_duty_control),
+    ]:
+        if key in config:
+            conf = config[key]
+            num = await number.new_number(
+                conf,
+                min_value=conf[CONF_MIN_VALUE],
+                max_value=conf[CONF_MAX_VALUE],
+                step=conf[CONF_STEP],
+            )
+            cg.add(setter(num))

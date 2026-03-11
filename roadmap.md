@@ -11,9 +11,10 @@ High-level milestones
 - Add an optional BLE UART bridge (ESP32) to proxy VESC Tool connections to the physical UART.
 - Add CI: build checks for ESPHome examples and unit tests for parser/CRC (host-buildable).
 - Write docs, examples, wiring diagrams, and publish to GitHub with clear license and attribution.
-- Consider using esp-idf instead of arduino as the framework 
+- Consider using esp-idf instead of arduino as the framework
 - Handle BLE bonding/security to prevent random people from connecting to the VESC
 - Expose the fan-specific controls (like specific RPM presets) as standard ESPHome Fan components
+- Wattage sensor
 
 Design notes
 ------------
@@ -21,7 +22,7 @@ Design notes
 - Expose configuration via YAML with reasonable defaults; validate/clamp unsafe inputs (e.g., RPM/duty limits).
 - Use `Stream*` for serial abstraction so code works with `Serial`, `Serial2`, USB CDC, etc.
 - For BLE bridge, implement a byte-forwarding queue and handle concurrency between BLE callbacks and the main loop.
-- In docs and comments, don't miss any opportunity to warn users about the consequences of incorrect settings 
+- In docs and comments, don't miss any opportunity to warn users about the consequences of incorrect settings
 
 
 Testing & CI

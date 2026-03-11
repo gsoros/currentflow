@@ -5,28 +5,28 @@ switch:
     name: "VESC Tool Bluetooth Access"
     optimistic: true
     on_turn_on:
-      # start_ble() should set enabled_ = true flag and startAdvertising() 
+      # start_ble() should set enabled_ = true flag and startAdvertising()
       # _enabled is checked in loop() and onConnect()
-      lambda: 'id(my_vesc_bridge).start_ble();' 
+      lambda: 'id(my_vesc_bridge).start_ble();'
     on_turn_off:
-      # stop_ble() should set enabled_ = false, disconnect(), 
+      # stop_ble() should set enabled_ = false, disconnect(),
       # stopAdvertising()
       lambda: 'id(my_vesc_bridge).stop_ble();'
 
 void stop_ble() {
     this->enabled_ = false;
-    
+
     if (this->ble_connected_) {
         // Force the phone to drop the link
         this->ble_server_->disconnect(this->conn_id_);
     }
-    
+
     // Stop broadcasting so the device "disappears"
     this->ble_server_->getAdvertising()->stop();
-    
+
     // Reset state for next time
     this->ble_connected_ = false;
-    this->set_mtu(23); 
+    this->set_mtu(23);
 }
 
 
@@ -70,11 +70,11 @@ class VescFan : public fan::Fan, public Component {
     }
 
     // Example: Map 0-100% speed to VESC RPM or Duty Cycle
-    float vesc_val = this->speed / 100.0f; 
+    float vesc_val = this->speed / 100.0f;
     if (this->direction == fan::FanDirection::REVERSE) {
       vesc_val *= -1;
     }
-    
+
     // Call your existing UART command function here
     // this->parent_->set_duty_cycle(vesc_val);
   }
@@ -121,3 +121,20 @@ void flush_buffer(size_t length) {
     pCharacteristic->notify();
     index = 0;
 }
+
+
+/// Fix for the slider bounce
+void set_target_speed(float speed) {
+  this->send_vesc_command(speed);
+
+  // TODO check is update_interval is already small?
+
+  // Set polling to 250ms for the next 5 seconds
+  this->set_interval("fast_poll", 250, [this]() { this->update(); });
+
+  this->set_timeout("stop_fast_poll", 5000, [this]() {
+    this->cancel_interval("fast_poll");
+  });
+}
+
+

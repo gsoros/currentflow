@@ -9,22 +9,10 @@ esphome:
       - lambda: "id(my_vesc_ptr) = id(my_vesc_hub);"
   platformio_options:
     build_flags:
-      #- -DCONFIG_BT_NIMBLE_LOG_LEVEL=0       # This causes redefine errors
-      #- -DCONFIG_NIMBLE_CPP_LOG_LEVEL=0      # 0 is the most verbose (DEBUG)
-      #- -DCORE_DEBUG_LEVEL=4                 # Sets Arduino core debug to DEBUG level
-      #- -DCONFIG_BT_NIMBLE_ROLE_PERIPHERAL=1 # Force enable peripheral role
-      #- -DARDUINO_USB_CDC_ON_BOOT=1          # Helps if logs are trapped in the internal buffer
-      #- -DARDUINO_USB_CDC_ON_BOOT=0
       - -DUSE_NIMBLE
       - -DCONFIG_BT_ENABLED=1
       - -DCONFIG_BT_NIMBLE_ENABLED=1
       - -DCONFIG_BT_CONTROLLER_ENABLED=1
-      #- -DCONFIG_BT_NIMBLE_HCI_UART_BAUD_RATE=115200
-      #- -DCONFIG_BT_NIMBLE_MSYS1_BLOCK_COUNT=12 # Increase memory blocks
-      #- -DCONFIG_BT_NIMBLE_PINNED_TO_CORE=0
-      #- -DCONFIG_BT_NIMBLE_HCI_EVT_HI_BUF_COUNT=32
-      #- -DCONFIG_BT_NIMBLE_HCI_EVT_LO_BUF_COUNT=8
-      #- -DCONFIG_BT_NIMBLE_MSYS1_BLOCK_COUNT=16
 
 esp32:
   board: lolin32_lite
@@ -59,21 +47,41 @@ sensor:
     voltage:
       name: "Input Voltage"
       id: vesc_voltage
+      filters:
+        - delta: 0.1
     rpm:
       name: "RPM"
       id: vesc_rpm
-    duty_cycle:
+      filters:
+        - delta: 1
+    duty:
       name: "Duty Cycle"
-      id: vesc_duty_cycle
+      id: vesc_duty
+      filters:
+        - delta: 0.005
     input_current:
       name: "Input Current"
       id: vesc_input_current
+      filters:
+        - delta: 0.005
     phase_current:
       name: "Phase Current"
       id: vesc_phase_current
+      filters:
+        - delta: 0.03
     fet_temp:
       name: "FET Temperature"
       id: vesc_fet_temp
+      filters:
+        - delta: 0.2
+    wattage:
+      name: "Wattage"
+      id: vesc_wattage
+      filters:
+        - delta: 0.005
+    control_mode:
+      name: "Mode"
+      id: vesc_control_mode
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
@@ -86,23 +94,32 @@ number:
     rpm_control:
       name: "Motor Target RPM"
       id: rpm_slider
+      min_value: -100
+      max_value: 476
+      step: 1
       unit_of_measurement: "RPM"
       mode: SLIDER
     current_control:
       name: "Motor Target Current"
       id: current_slider
+      min_value: 0
+      max_value: 1.25
+      step: 0.005
       unit_of_measurement: "A"
       mode: SLIDER
-    duty_cycle_control:
+    duty_control:
       name: "Motor Target Duty Cycle"
-      id: duty_cycle_slider
+      id: duty_slider
+      min_value: 0
+      max_value: 0.5
+      step: 0.005
       unit_of_measurement: "%"
       mode: SLIDER
 
 switch:
   - platform: template
     id: ble_bridge_enabled
-    name: "BLE Bridge Enabled"
+    name: "BLE UART Bridge"
     icon: "mdi:bluetooth"
     restore_mode: RESTORE_DEFAULT_ON
     lambda: |-
@@ -116,6 +133,12 @@ button:
   - platform: restart
     id: reboot
     name: "Reboot"
+  - platform: template
+    id: stop
+    name: "Stop"
+    on_press:
+      - lambda: |-
+          id(my_vesc_hub).stop();
 
 uart:
   id: esp_uart
@@ -139,6 +162,7 @@ vesc_component:
   uart: esp_uart
   ble_uart_component_id: my_ble_uart_component
   #debug_port: debug_uart
+  motor_pole_pairs: 21
 
 # Define the global variable to store our custom component instance
 globals:
