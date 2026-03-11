@@ -1,5 +1,5 @@
 import esphome.codegen as cg
-from esphome.components import sensor, text_sensor
+from esphome.components import sensor
 import esphome.config_validation as cv
 from esphome.const import STATE_CLASS_MEASUREMENT, UNIT_AMPERE, UNIT_VOLT, UNIT_WATT
 
@@ -53,8 +53,10 @@ CONFIG_SCHEMA = cv.Schema(
             accuracy_decimals=3,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional("control_mode"): text_sensor.text_sensor_schema(
-            icon="mdi:electric-switch",
+        cv.Optional("fault_code"): sensor.sensor_schema(
+            icon="mdi:alert-circle-outline",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
         ),
     }
 ).extend(cv.COMPONENT_SCHEMA)
@@ -84,7 +86,6 @@ async def to_code(config):
     if "wattage" in config:
         sens = await sensor.new_sensor(config["wattage"])
         cg.add(var.set_wattage_sensor(sens))
-    if "control_mode" in config:
-        conf = config["control_mode"]
-        sens = await text_sensor.new_text_sensor(conf)
-        cg.add(var.set_fault_code_text_sensor(sens))
+    if "fault_code" in config:
+        sens = await sensor.new_sensor(config["fault_code"])
+        cg.add(var.set_fault_code_sensor(sens))

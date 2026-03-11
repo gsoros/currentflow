@@ -22,30 +22,50 @@ static const char *const TAG = "vesc_component";
 
 class VescControlRpm : public number::Number {
  public:
-  void control(float mechanical_rpm) override {
-    this->target = clamp(mechanical_rpm, this->traits.get_min_value(), this->traits.get_max_value());
-    // ESP_LOGD(TAG, "VescControlRpm::control(%.0f) -> %.0f", mechanical_rpm, this->target);
+  void control(float v) override {
+    ESP_LOGD(TAG, "VescControlRpm::control(%.0f) /%.0f/", v, this->target);
+    float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
+    if (new_target == this->target)
+      return;
+    this->target = new_target;
+    this->updated = true;
+    ESP_LOGD(TAG, "VescControlRpm target updated");
   }
 
   float target = 0.0f;
+  bool updated = false;
 };
 
 class VescControlDuty : public number::Number {
  public:
-  void control(float duty) override {
-    this->target = clamp(duty, this->traits.get_min_value(), this->traits.get_max_value());
+  void control(float v) override {
+    ESP_LOGD(TAG, "VescControlDuty::control(%.3f) /%.3f/", v, this->target);
+    float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
+    if (new_target == this->target)
+      return;
+    this->target = new_target;
+    this->updated = true;
+    ESP_LOGD(TAG, "VescControlDuty target updated");
   }
 
   float target = 0.0f;
+  bool updated = false;
 };
 
 class VescControlCurrent : public number::Number {
  public:
-  void control(float current) override {
-    this->target = clamp(current, this->traits.get_min_value(), this->traits.get_max_value());
+  void control(float v) override {
+    ESP_LOGD(TAG, "VescControlCurrent::control(%.3f) /%.3f/", v, this->target);
+    float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
+    if (new_target == this->target)
+      return;
+    this->target = new_target;
+    this->updated = true;
+    ESP_LOGD(TAG, "VescControlCurrent target updated");
   }
 
   float target = 0.0f;
+  bool updated = false;
 };
 
 // Adapter: wrap esphome::uart::UARTComponent with a minimal Arduino Stream
@@ -110,6 +130,7 @@ class VescComponent : public PollingComponent {
   sensor::Sensor *phase_current_sensor_{nullptr};
   sensor::Sensor *fet_temp_sensor_{nullptr};
   sensor::Sensor *wattage_sensor_{nullptr};
+  sensor::Sensor *fault_code_sensor_{nullptr};
   text_sensor::TextSensor *control_mode_sensor_{nullptr};
 
   VescControlRpm *rpm_control_{nullptr};
@@ -135,6 +156,12 @@ class VescComponent : public PollingComponent {
       ESP_LOGW(TAG, "No uart_adapter_, using Serial2 as fallback");
       this->vesc.setSerialPort(&Serial2);
     }
+
+    // disable scheduler, we take care of calling update() in loop()
+    // this->update_interval_ will still hold the value from yaml
+    // yes, there will be an unexpected update() call in about 50 days :)
+    this->set_update_interval(UINT32_MAX);
+
     this->setup_done = millis();
   }
 
@@ -200,46 +227,81 @@ class VescComponent : public PollingComponent {
 
     // Rate limit outgoing commands to at most 4 Hz to avoid
     // overwhelming the VESC or the serial connection
-    // now = millis(); // Updated at the start of loop()
     if (now - this->last_send_time_ > 250) {
       if (this->get_target_rpm() > 10.0f) {  // Small deadzone
         this->control_mode_ = 'R';
         this->send_rpm_command();
         // Clear duty cycle and current to avoid conflicts
-        this->set_target_duty(0.0f);
-        this->set_target_current(0.0f);
+        this->set_target_duty(0.0f, false);
+        this->set_target_current(0.0f, false);
       } else if (this->get_target_duty() > 0.01f) {  // Small deadzone
         this->control_mode_ = 'D';
         this->send_duty_command();
         // Clear RPM and current to avoid conflicts
-        this->set_target_rpm(0.0f);
-        this->set_target_current(0.0f);
+        this->set_target_rpm(0.0f, false);
+        this->set_target_current(0.0f, false);
       } else if (this->get_target_current() > 0.01f) {  // Small deadzone
         this->control_mode_ = 'C';
         this->send_current_command();
         // Clear RPM and duty cycle to avoid conflicts
-        this->set_target_rpm(0.0f);
-        this->set_target_duty(0.0f);
+        this->set_target_rpm(0.0f, false);
+        this->set_target_duty(0.0f, false);
       } else {
         this->control_mode_ = 'N';
         // Force 0.0 Amps (Coast) to protect the DC Source
+        // TODO add config option to disable this to allow regen braking?
         this->vesc.setCurrent(0.0f);
       }
       this->last_send_time_ = now;
     }
+
+    // TODO configurable boost interval and duration
+    static const uint32_t boost_interval = 250;   // 4 Hz
+    static const uint32_t boost_duration = 5000;  // 5s
+    static uint32_t boost_start = 0;
+    static uint32_t last_poll = 0;
+
+    if ((this->rpm_control_ && this->rpm_control_->updated) ||
+        (this->current_control_ && this->current_control_->updated) ||
+        (this->duty_control_ && this->duty_control_->updated)) {
+      ESP_LOGD(TAG, "a control was updated");
+      if (!boost_start)
+        ESP_LOGD(TAG, "Poll boost start");
+      boost_start = now;
+      if (this->rpm_control_)
+        this->rpm_control_->updated = false;
+      if (this->current_control_)
+        this->current_control_->updated = false;
+      if (this->duty_control_)
+        this->duty_control_->updated = false;
+    }
+
+    // if (boost_start)
+    // ESP_LOGD(TAG, "Boost started %.1fs ago", (now - boost_start) / 1000.0f);
+
+    if (boost_start && (now - boost_start > boost_duration)) {
+      ESP_LOGD(TAG, "Poll boost end");
+      boost_start = 0;
+    }
+
+    const uint32_t interval = boost_start ? boost_interval : this->update_interval_;
+    if (now - last_poll < interval)
+      return;
+    last_poll = now;
+
+    this->update();
   }
 
   void update() override {
-    // update() is called on a timer ('update_interval' in YAML).
-    // If VESC Tool is connected, it's doing that itself — don't interfere.
     if (ble_active_())
       return;
 
     // TODO We are always publishing "old" data, can this be improved?
     // Maybe set a flag when a complete telemetry package is parsed,
-    // and publish in the next loop() considering the update_interval
-    // value set in yaml.
+    // and publish in the next loop() considering the update_interval_
+    // value set in yaml?
 
+    ESP_LOGD(TAG, "Publishing");
     float mrpm = latestData.rpm / motor_pole_pairs_;
     if (this->voltage_sensor_)
       this->voltage_sensor_->publish_state(latestData.inpVoltage);
@@ -255,8 +317,16 @@ class VescComponent : public PollingComponent {
       this->fet_temp_sensor_->publish_state(latestData.tempMosfet);
     if (this->wattage_sensor_)
       this->wattage_sensor_->publish_state(latestData.inpVoltage * latestData.avgInputCurrent);
-    if (this->control_mode_sensor_)
-      this->control_mode_sensor_->publish_state(this->control_mode_);
+    if (this->fault_code_sensor_)
+      this->fault_code_sensor_->publish_state(latestData.error);
+    if (this->control_mode_sensor_) {
+      static char last_control_mode = 'N';
+      if (last_control_mode != this->control_mode_) {
+        last_control_mode = this->control_mode_;
+        std::string s{this->control_mode_};
+        this->control_mode_sensor_->publish_state(s);
+      }
+    }
 
     if (this->rpm_control_)
       this->rpm_control_->publish_state(round(mrpm));
@@ -314,6 +384,7 @@ class VescComponent : public PollingComponent {
   void set_phase_current_sensor(sensor::Sensor *s) { phase_current_sensor_ = s; }
   void set_fet_temp_sensor(sensor::Sensor *s) { fet_temp_sensor_ = s; }
   void set_wattage_sensor(sensor::Sensor *s) { wattage_sensor_ = s; }
+  void set_fault_code_sensor(sensor::Sensor *s) { fault_code_sensor_ = s; }
   void set_control_mode_sensor(text_sensor::TextSensor *s) { control_mode_sensor_ = s; }
 
   void set_rpm_control(VescControlRpm *n) { rpm_control_ = n; }
@@ -371,31 +442,40 @@ class VescComponent : public PollingComponent {
       return 0.0f;
     return this->rpm_control_->target;
   }
-  void set_target_rpm(float v) {
+  void set_target_rpm(float v, bool set_updated_flag = true) {
     // ESP_LOGD(TAG, "set_target_rpm(%.2f)", v);
     if (!this->rpm_control_)
       return;
-    this->rpm_control_->control(v);
+    if (set_updated_flag)
+      this->rpm_control_->control(v);
+    else
+      this->rpm_control_->target = v;
   }
   float get_target_current() {
     if (!this->current_control_)
       return 0.0f;
     return this->current_control_->target;
   }
-  void set_target_current(float v) {
+  void set_target_current(float v, bool set_updated_flag = true) {
     if (!this->current_control_)
       return;
-    this->current_control_->control(v);
+    if (set_updated_flag)
+      this->current_control_->control(v);
+    else
+      this->current_control_->target = v;
   }
   float get_target_duty() {
     if (!this->duty_control_)
       return 0.0f;
     return this->duty_control_->target;
   }
-  void set_target_duty(float v) {
+  void set_target_duty(float v, bool set_updated_flag = true) {
     if (!this->duty_control_)
       return;
-    this->duty_control_->control(v);
+    if (set_updated_flag)
+      this->duty_control_->control(v);
+    else
+      this->duty_control_->target = v;
   }
 
   bool ble_active_() const {

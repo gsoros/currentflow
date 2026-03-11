@@ -28,6 +28,7 @@ logger:
     #ble_uart: DEBUG
     sensor: WARN
     number: WARN
+    #text_sensor: WARN
     #esp32_ble: WARN
     #api.service: WARN
   baud_rate: 0 #disabled
@@ -79,12 +80,19 @@ sensor:
       id: vesc_wattage
       filters:
         - delta: 0.005
-    control_mode:
-      name: "Mode"
-      id: vesc_control_mode
+    fault_code: # See mc_fault_code struct in helpers.h for fault code definitions
+      name: "Fault Code"
+      id: vesc_fault_code
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
+
+text_sensor:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+    control_mode:
+      name: "Control Mode"
+      id: vesc_control_mode
 
 # Controls
 
@@ -136,6 +144,7 @@ button:
   - platform: template
     id: stop
     name: "Stop"
+    icon: "md:stop-circle-outline"
     on_press:
       - lambda: |-
           id(my_vesc_hub).stop();

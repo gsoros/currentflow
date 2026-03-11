@@ -1,35 +1,5 @@
 *** Toggle BLE Bridge
 
-switch:
-  - platform: template
-    name: "VESC Tool Bluetooth Access"
-    optimistic: true
-    on_turn_on:
-      # start_ble() should set enabled_ = true flag and startAdvertising()
-      # _enabled is checked in loop() and onConnect()
-      lambda: 'id(my_vesc_bridge).start_ble();'
-    on_turn_off:
-      # stop_ble() should set enabled_ = false, disconnect(),
-      # stopAdvertising()
-      lambda: 'id(my_vesc_bridge).stop_ble();'
-
-void stop_ble() {
-    this->enabled_ = false;
-
-    if (this->ble_connected_) {
-        // Force the phone to drop the link
-        this->ble_server_->disconnect(this->conn_id_);
-    }
-
-    // Stop broadcasting so the device "disappears"
-    this->ble_server_->getAdvertising()->stop();
-
-    // Reset state for next time
-    this->ble_connected_ = false;
-    this->set_mtu(23);
-}
-
-
 
 *** EH Native Fan Component ***
 

@@ -5,7 +5,7 @@ from esphome.components import uart
 import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_UPDATE_INTERVAL
 
-DEPENDENCIES = ["sensor", "uart"]
+# DEPENDENCIES = ["sensor", "text_sensor", "number", "uart"]
 
 CONF_UART = "uart"
 CONF_DEBUG_PORT = "debug_port"
