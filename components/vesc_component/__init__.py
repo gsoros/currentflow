@@ -13,6 +13,8 @@ CONF_TIMEOUT_MS = "timeout_ms"
 CONF_RX_BUF = "rx_buffer_size"
 CONF_BLE_UART_COMPONENT_ID = "ble_uart_component_id"
 CONF_POLE_PAIRS = "motor_pole_pairs"
+CONF_BOOST_INTERVAL = "boost_interval"
+CONF_BOOST_DURATION = "boost_duration"
 
 # 1. Define namespace and class
 vesc_component_ns = cg.esphome_ns.namespace("vesc_component")
@@ -30,6 +32,8 @@ CONFIG_SCHEMA = cv.Schema(
             "ble_uart_component.BleUartComponent"
         ),
         cv.Optional(CONF_POLE_PAIRS, default=15): cv.int_range(min=1, max=100),
+        cv.Optional(CONF_BOOST_DURATION, default=5000): cv.int_range(min=0, max=100000),
+        cv.Optional(CONF_BOOST_INTERVAL, default=250): cv.int_range(min=100, max=1000),
     }
 ).extend(cv.polling_component_schema("1s"))
 
@@ -62,6 +66,12 @@ async def to_code(config):
 
     # Optional number of motor pole pairs (for erpm <-> rpm conversion)
     cg.add(var.set_motor_pole_pairs(config[CONF_POLE_PAIRS]))
+
+    # Optional boost duration
+    cg.add(var.set_boost_duration(config[CONF_BOOST_DURATION]))
+
+    # Optional boost interval
+    cg.add(var.set_boost_interval(config[CONF_BOOST_INTERVAL]))
 
     # This tells the compiler to look inside the current component folder for headers like helpers.h
     cg.add_build_flag("-I" + os.path.dirname(__file__))

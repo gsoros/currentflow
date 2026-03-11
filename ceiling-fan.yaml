@@ -143,7 +143,7 @@ button:
   - platform: template
     id: stop
     name: "Stop"
-    icon: "md:stop-circle-outline"
+    icon: "md:cancel"
     on_press:
       - lambda: |-
           id(my_vesc_hub).stop();
@@ -171,6 +171,8 @@ vesc_component:
   ble_uart_component_id: my_ble_uart_component
   #debug_port: debug_uart
   motor_pole_pairs: 21 # Used for RPM <-> eRPM conversion
+  boost_interval: 150 # Frequency of telemetry updates after a control input (ms) (0 to disable)
+  boost_duration: 3000 # Duration of the snappy telemetry (ms) (0 to disable)
 
 # Define the global variable to store our custom component instance
 globals:

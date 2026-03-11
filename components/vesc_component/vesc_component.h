@@ -157,9 +157,9 @@ class VescComponent : public PollingComponent {
       this->vesc.setSerialPort(&Serial2);
     }
 
-    // disable scheduler, we take care of calling update() in loop()
-    // this->update_interval_ will still hold the value from yaml
-    // yes, there will be an unexpected update() call in about 50 days :)
+    // Disable scheduler. We take care of calling update() in loop()
+    // this->update_interval_ will still hold the value from yaml.
+    // Yes, there will be an unexpected update() call in about 50 days ;)
     this->set_update_interval(UINT32_MAX);
 
     this->setup_done = millis();
@@ -255,15 +255,14 @@ class VescComponent : public PollingComponent {
       this->last_send_time_ = now;
     }
 
-    // TODO configurable boost interval and duration
-    static const uint32_t boost_interval = 250;   // 4 Hz
-    static const uint32_t boost_duration = 5000;  // 5s
+    // Increase the frequency of telemetry updates after a control command
     static uint32_t boost_start = 0;
     static uint32_t last_poll = 0;
 
-    if ((this->rpm_control_ && this->rpm_control_->updated) ||
-        (this->current_control_ && this->current_control_->updated) ||
-        (this->duty_control_ && this->duty_control_->updated)) {
+    if (this->boost_duration_ && this->boost_interval_ &&
+        ((this->rpm_control_ && this->rpm_control_->updated) ||
+         (this->current_control_ && this->current_control_->updated) ||
+         (this->duty_control_ && this->duty_control_->updated))) {
       // ESP_LOGD(TAG, "a control is flagged as updated");
       if (!boost_start)
         // ESP_LOGD(TAG, "Poll boost start");
@@ -279,12 +278,12 @@ class VescComponent : public PollingComponent {
     // if (boost_start)
     // ESP_LOGD(TAG, "Boost started %.1fs ago", (now - boost_start) / 1000.0f);
 
-    if (boost_start && (now - boost_start > boost_duration)) {
+    if (boost_start && (now - boost_start > this->boost_duration_)) {
       // ESP_LOGD(TAG, "Poll boost end");
       boost_start = 0;
     }
 
-    const uint32_t interval = boost_start ? boost_interval : this->update_interval_;
+    const uint32_t interval = boost_start ? this->boost_interval_ : this->update_interval_;
     if (now - last_poll < interval)
       return;
     last_poll = now;
@@ -377,6 +376,9 @@ class VescComponent : public PollingComponent {
     motor_pole_pairs_ = pp;
   }
 
+  void set_boost_interval(uint32_t i) { this->boost_interval_ = i; }
+  void set_boost_duration(uint32_t d) { this->boost_duration_ = d; }
+
   void set_voltage_sensor(sensor::Sensor *s) { voltage_sensor_ = s; }
   void set_rpm_sensor(sensor::Sensor *s) { rpm_sensor_ = s; }
   void set_duty_sensor(sensor::Sensor *s) { duty_sensor_ = s; }
@@ -433,6 +435,8 @@ class VescComponent : public PollingComponent {
   UARTComponentStream *uart_adapter_{nullptr};
   UARTComponentStream *debug_adapter_{nullptr};
   ble_uart_component::BleUartComponent *ble_uart_component_{nullptr};
+  uint32_t boost_interval_ = 250;   // default 250ms
+  uint32_t boost_duration_ = 5000;  // default 5s
 
   uint32_t last_send_time_{0};
   char control_mode_ = 'N';  // R: RPM, D: Duty Cycle, C: Current, N: None
