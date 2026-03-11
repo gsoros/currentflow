@@ -23,13 +23,13 @@ static const char *const TAG = "vesc_component";
 class VescControlRpm : public number::Number {
  public:
   void control(float v) override {
-    ESP_LOGD(TAG, "VescControlRpm::control(%.0f) /%.0f/", v, this->target);
+    // ESP_LOGD(TAG, "VescControlRpm::control(%.0f) /%.0f/", v, this->target);
     float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
     if (new_target == this->target)
       return;
     this->target = new_target;
     this->updated = true;
-    ESP_LOGD(TAG, "VescControlRpm target updated");
+    // ESP_LOGD(TAG, "VescControlRpm target updated");
   }
 
   float target = 0.0f;
@@ -39,13 +39,13 @@ class VescControlRpm : public number::Number {
 class VescControlDuty : public number::Number {
  public:
   void control(float v) override {
-    ESP_LOGD(TAG, "VescControlDuty::control(%.3f) /%.3f/", v, this->target);
+    // ESP_LOGD(TAG, "VescControlDuty::control(%.3f) /%.3f/", v, this->target);
     float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
     if (new_target == this->target)
       return;
     this->target = new_target;
     this->updated = true;
-    ESP_LOGD(TAG, "VescControlDuty target updated");
+    // ESP_LOGD(TAG, "VescControlDuty target updated");
   }
 
   float target = 0.0f;
@@ -55,13 +55,13 @@ class VescControlDuty : public number::Number {
 class VescControlCurrent : public number::Number {
  public:
   void control(float v) override {
-    ESP_LOGD(TAG, "VescControlCurrent::control(%.3f) /%.3f/", v, this->target);
+    // ESP_LOGD(TAG, "VescControlCurrent::control(%.3f) /%.3f/", v, this->target);
     float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
     if (new_target == this->target)
       return;
     this->target = new_target;
     this->updated = true;
-    ESP_LOGD(TAG, "VescControlCurrent target updated");
+    // ESP_LOGD(TAG, "VescControlCurrent target updated");
   }
 
   float target = 0.0f;
@@ -264,10 +264,10 @@ class VescComponent : public PollingComponent {
     if ((this->rpm_control_ && this->rpm_control_->updated) ||
         (this->current_control_ && this->current_control_->updated) ||
         (this->duty_control_ && this->duty_control_->updated)) {
-      ESP_LOGD(TAG, "a control was updated");
+      // ESP_LOGD(TAG, "a control is flagged as updated");
       if (!boost_start)
-        ESP_LOGD(TAG, "Poll boost start");
-      boost_start = now;
+        // ESP_LOGD(TAG, "Poll boost start");
+        boost_start = now;
       if (this->rpm_control_)
         this->rpm_control_->updated = false;
       if (this->current_control_)
@@ -280,7 +280,7 @@ class VescComponent : public PollingComponent {
     // ESP_LOGD(TAG, "Boost started %.1fs ago", (now - boost_start) / 1000.0f);
 
     if (boost_start && (now - boost_start > boost_duration)) {
-      ESP_LOGD(TAG, "Poll boost end");
+      // ESP_LOGD(TAG, "Poll boost end");
       boost_start = 0;
     }
 
@@ -301,7 +301,7 @@ class VescComponent : public PollingComponent {
     // and publish in the next loop() considering the update_interval_
     // value set in yaml?
 
-    ESP_LOGD(TAG, "Publishing");
+    // ESP_LOGD(TAG, "Publishing");
     float mrpm = latestData.rpm / motor_pole_pairs_;
     if (this->voltage_sensor_)
       this->voltage_sensor_->publish_state(latestData.inpVoltage);
@@ -479,7 +479,6 @@ class VescComponent : public PollingComponent {
   }
 
   bool ble_active_() const {
-    // return ble_uart_component_ != nullptr && ble_uart_component_->is_ble_connected();
     if (ble_uart_component_ == nullptr) {
       ESP_LOGD(TAG, "BLE UART component not set, treating BLE as inactive");
       return false;

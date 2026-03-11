@@ -29,7 +29,6 @@ logger:
     sensor: WARN
     number: WARN
     #text_sensor: WARN
-    #esp32_ble: WARN
     #api.service: WARN
   baud_rate: 0 #disabled
   #baud_rate: 115200
@@ -171,7 +170,7 @@ vesc_component:
   uart: esp_uart
   ble_uart_component_id: my_ble_uart_component
   #debug_port: debug_uart
-  motor_pole_pairs: 21
+  motor_pole_pairs: 21 # Used for RPM <-> eRPM conversion
 
 # Define the global variable to store our custom component instance
 globals:

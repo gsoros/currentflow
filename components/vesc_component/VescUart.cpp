@@ -168,13 +168,15 @@ int VescUart::finalizePacket() {
       popByte();
 
     // TODO: reset_parser() here?
-    int ret =
-        expected_payload_len;  // TODO should we return the actual payload length instead of the expected? In theory
-                               // they should be the same if everything is correct, but if we want to be extra safe we
-                               // could return the length we got from the packet instead of what we expected based on
-                               // the header. This would also allow us to detect cases where the header length was wrong
-                               // but the CRC still matched (e.g. if there was an extra byte in the payload that got
-                               // ignored by the header length but included in the CRC).
+    int ret = expected_payload_len;
+
+    // TODO should we return the actual payload length instead of the expected? In theory
+    // they should be the same if everything is correct, but if we want to be extra safe we
+    // could return the length we got from the packet instead of what we expected based on
+    // the header. This would also allow us to detect cases where the header length was wrong
+    // but the CRC still matched (e.g. if there was an extra byte in the payload that got
+    // ignored by the header length but included in the CRC).
+
     expected_payload_len = 0;
     expected_total_len = 0;
     state = WAIT_START;

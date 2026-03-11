@@ -1,3 +1,9 @@
+/*
+
+  ble_uart_component.h
+
+  */
+
 #pragma once
 
 #include "esphome/core/component.h"
