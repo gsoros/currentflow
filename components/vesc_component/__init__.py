@@ -7,6 +7,7 @@ from esphome.const import CONF_ID, CONF_UPDATE_INTERVAL
 
 # DEPENDENCIES = ["sensor", "text_sensor", "number", "uart"]
 
+CONF_VESC_ID = "vesc_id"
 CONF_UART = "uart"
 CONF_DEBUG_PORT = "debug_port"
 CONF_TIMEOUT_MS = "timeout_ms"

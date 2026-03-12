@@ -3,10 +3,7 @@ from esphome.components import sensor
 import esphome.config_validation as cv
 from esphome.const import STATE_CLASS_MEASUREMENT, UNIT_AMPERE, UNIT_VOLT, UNIT_WATT
 
-from . import VescComponent
-
-# Use the ID from __init__.py to link sensors
-CONF_VESC_ID = "vesc_id"
+from . import CONF_VESC_ID, VescComponent
 
 CONFIG_SCHEMA = cv.Schema(
     {

@@ -3,10 +3,7 @@ from esphome.components import number
 import esphome.config_validation as cv
 from esphome.const import CONF_MAX_VALUE, CONF_MIN_VALUE, CONF_STEP
 
-from . import VescComponent, vesc_component_ns
-
-# Use the ID from __init__.py to link numbers
-CONF_VESC_ID = "vesc_id"
+from . import CONF_VESC_ID, VescComponent, vesc_component_ns
 
 VescControlRpm = vesc_component_ns.class_("VescControlRpm", number.Number)
 VescControlDuty = vesc_component_ns.class_("VescControlDuty", number.Number)

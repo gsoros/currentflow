@@ -5,6 +5,28 @@
 
 extern "C" {
 
+const char *mc_fault_code_to_string(mc_fault_code fault) {
+  switch (fault) {
+    case FAULT_CODE_NONE:
+      return "NONE";
+    case FAULT_CODE_OVER_VOLTAGE:
+      return "OVER_VOLTAGE";
+    case FAULT_CODE_UNDER_VOLTAGE:
+      return "UNDER_VOLTAGE";
+    case FAULT_CODE_DRV:
+      return "DRV";
+    case FAULT_CODE_ABS_OVER_CURRENT:
+      return "ABS_OVER_CURRENT";
+    case FAULT_CODE_OVER_TEMP_FET:
+      return "OVER_TEMP_FET";
+    case FAULT_CODE_OVER_TEMP_MOTOR:
+      return "OVER_TEMP_MOTOR";
+    default:
+      // TODO log on unknown error?
+      return "UNKNOWN";
+  }
+}
+
 void buffer_append_int32(uint8_t *buffer, int32_t number, int32_t *index) {
   buffer[(*index)++] = number >> 24;
   buffer[(*index)++] = number >> 16;

@@ -215,6 +215,11 @@ void VescUart::requestValues(uint8_t canId) {
   packSendPayload(payload, payloadSize);
 }
 
+// TODO Add support for long packet format.
+// unpackPayload assumes short packet format — it hardcodes message[1]
+// as the length byte and &message[2] as payload start, which only works
+// for short packets (start byte 0x02). Long packets (0x03) have a 2-byte
+// length field, so this will silently misparse them
 bool VescUart::unpackPayload(uint8_t *message, int len, uint8_t *payload) {
   // ESP_LOGD("VescUart", "Unpacking payload from message of length %d", len);
   // logPacket(message, (size_t)len);
@@ -289,7 +294,7 @@ bool VescUart::processReadPayload(uint8_t *payload, size_t len) {
   COMM_PACKET_ID id = (COMM_PACKET_ID) payload[0];
   payload++;  // Move past ID for easier parsing of the rest of the payload
 
-  // ESP_LOGD("VescUart", "Payload  without ID:");
+  // ESP_LOGD("VescUart", "Payload without ID:");
   // logPacket(payload, len - 1);
 
   switch (id) {
@@ -317,10 +322,15 @@ bool VescUart::processReadPayload(uint8_t *payload, size_t len) {
       data.id = payload[index++];
       return true;
 
-    case 135:  // Lisp / Terminal Print
-      // Null-terminate to log it as a string
-      // payload[len] = '\0';
-      // ESP_LOGI("vesc_term", "%s", (char*)payload);
+    case COMM_LISP_PRINT:  // Lisp / Terminal Print
+      // Note: payload here already points past the ID byte (the payload++
+      // at the top of processReadPayload took care of that), and len is
+      // expected_payload_len which still includes the ID. So len - 1 is the
+      // actual string length.
+      if (len > 1) {  // len includes the ID byte already consumed
+        strncpy(data.lispPrint, reinterpret_cast<char *>(payload), len - 1);
+        ESP_LOGI("vesc_lisp", "%s", data.lispPrint);
+      }
       return true;
 
     default:
@@ -387,6 +397,18 @@ void VescUart::sendKeepalive(uint8_t canId) {
   packSendPayload(payload, payloadSize);
 }
 
+void VescUart::sendReboot(uint8_t canId) {
+  int32_t index = 0;
+  int payloadSize = (canId == 0 ? 1 : 3);
+  uint8_t payload[payloadSize];
+  if (canId != 0) {
+    payload[index++] = {COMM_FORWARD_CAN};
+    payload[index++] = canId;
+  }
+  payload[index++] = {COMM_REBOOT};
+  packSendPayload(payload, payloadSize);
+}
+
 void VescUart::serialPrint(uint8_t *data, int len) {
   if (debugPort != NULL) {
     for (int i = 0; i <= len; i++) {
@@ -399,7 +421,8 @@ void VescUart::serialPrint(uint8_t *data, int len) {
 
 void VescUart::logPacket(uint8_t *buf, size_t len) {
   // ESP_LOG_BUFFER_HEX("vesc_packet", buf, len);
-  char hex_str[len * 3 + 1];
+  // char hex_str[len * 3 + 1]; // VLA
+  char hex_str[VESC_MAX_PACKET_SIZE * 3 + 1];
   for (size_t i = 0; i < len; i++) {
     sprintf(&hex_str[i * 3], "%02X ", buf[i]);
   }

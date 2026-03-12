@@ -75,9 +75,11 @@ typedef enum {
   COMM_FORWARD_CAN,
   COMM_SET_CHUCK_DATA,
   COMM_CUSTOM_APP_DATA,
+  COMM_LISP_PRINT = 135
 } COMM_PACKET_ID;
 
 extern "C" {
+const char *mc_fault_code_to_string(mc_fault_code fault);
 int16_t buffer_get_int16(const uint8_t *buffer, int32_t *index);
 int32_t buffer_get_int32(const uint8_t *buffer, int32_t *index);
 float buffer_get_float16(const uint8_t *buffer, float scale, int32_t *index);

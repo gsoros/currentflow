@@ -6,11 +6,13 @@ vesc_component.h
 
 #pragma once
 
+#include "esphome/core/application.h"
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/number/number.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/core/log.h"
+#include "shared.h"
 #include "VescUart.h"
 #include "esphome/components/uart/uart.h"
 #include "../ble_uart_component/ble_uart_component.h"
@@ -18,18 +20,18 @@ vesc_component.h
 namespace esphome {
 namespace vesc_component {
 
-static const char *const TAG = "vesc_component";
+const char *TAG = "VescComponent";
 
 class VescControlRpm : public number::Number {
  public:
   void control(float v) override {
-    // ESP_LOGD(TAG, "VescControlRpm::control(%.0f) /%.0f/", v, this->target);
+    // ESP_LOGD("VescControlRpm", "VescControlRpm::control(%.0f) /%.0f/", v, this->target);
     float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
     if (new_target == this->target)
       return;
     this->target = new_target;
     this->updated = true;
-    // ESP_LOGD(TAG, "VescControlRpm target updated");
+    // ESP_LOGD("VescControlRpm", "VescControlRpm target updated");
   }
 
   float target = 0.0f;
@@ -39,13 +41,13 @@ class VescControlRpm : public number::Number {
 class VescControlDuty : public number::Number {
  public:
   void control(float v) override {
-    // ESP_LOGD(TAG, "VescControlDuty::control(%.3f) /%.3f/", v, this->target);
+    // ESP_LOGD("VescControlDuty", "VescControlDuty::control(%.3f) /%.3f/", v, this->target);
     float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
     if (new_target == this->target)
       return;
     this->target = new_target;
     this->updated = true;
-    // ESP_LOGD(TAG, "VescControlDuty target updated");
+    // ESP_LOGD("VescControlDuty", "VescControlDuty target updated");
   }
 
   float target = 0.0f;
@@ -55,13 +57,13 @@ class VescControlDuty : public number::Number {
 class VescControlCurrent : public number::Number {
  public:
   void control(float v) override {
-    // ESP_LOGD(TAG, "VescControlCurrent::control(%.3f) /%.3f/", v, this->target);
+    // ESP_LOGD("VescControlCurrent", "VescControlCurrent::control(%.3f) /%.3f/", v, this->target);
     float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
     if (new_target == this->target)
       return;
     this->target = new_target;
     this->updated = true;
-    // ESP_LOGD(TAG, "VescControlCurrent target updated");
+    // ESP_LOGD("VescControlCurrent", "VescControlCurrent target updated");
   }
 
   float target = 0.0f;
@@ -109,7 +111,10 @@ class UARTComponentStream : public Stream {
   }
 
  protected:
-  int availableForWrite() override { return 0; }
+  int availableForWrite() override {
+    // return value should reflect actual TX space, we don't use it here so it's fine
+    return 0;
+  }
 
  private:
   esphome::uart::UARTComponent *uart_;
@@ -119,8 +124,9 @@ class VescComponent : public PollingComponent {
  public:
   VescUart vesc{30};  // default 30ms timeout for UART responses
 
-  VescUart::dataPackage latestData;
-  unsigned long latestDataTime = 0;
+  VescUart::dataPackage latest_data;
+  unsigned long latest_data_time = 0;
+  bool data_ready_ = false;
 
  protected:
   sensor::Sensor *voltage_sensor_{nullptr};
@@ -132,6 +138,8 @@ class VescComponent : public PollingComponent {
   sensor::Sensor *wattage_sensor_{nullptr};
   sensor::Sensor *fault_code_sensor_{nullptr};
   text_sensor::TextSensor *control_mode_sensor_{nullptr};
+  text_sensor::TextSensor *fault_text_sensor_{nullptr};
+  text_sensor::TextSensor *lisp_print_sensor_{nullptr};
 
   VescControlRpm *rpm_control_{nullptr};
   VescControlDuty *duty_control_{nullptr};
@@ -180,8 +188,8 @@ class VescComponent : public PollingComponent {
       return;
     }
 
-    static bool first_run = true;
-    if (first_run && (now - this->setup_done < 5000)) {
+    static bool first_loop = true;
+    if (first_loop && (now - this->setup_done < 5000)) {
       // Wait 5 seconds after setup before trying to read, to give the VESC time to boot up and
       // respond, and the WiFi connection become established.
       static uint32_t vesc_wait_log_last = 0;
@@ -193,14 +201,14 @@ class VescComponent : public PollingComponent {
         this->uart_adapter_->flush();
       return;
     }
-    first_run = false;
+    first_loop = false;
 
     // Safety: if the hardware buffer becomes extremely full, discard a
     // bounded number of bytes and reset the parser so we can recover.
     // Reasons:
     // - Unbounded drains can block the loop and cause watchdog resets.
     // - `flush()` only affects TX, not RX, so we must read to clear RX.
-    // Strategy: discard up to `max_discard` bytes (128) per loop call,
+    // Strategy: discard up to `max_discard` bytes (128) per loop,
     // then reset the VESC parser state so parsing resumes at the next
     // valid start byte.
     size_t avail = (this->uart_adapter_ ? this->uart_adapter_->available() : 0);
@@ -221,8 +229,9 @@ class VescComponent : public PollingComponent {
     // Process incoming bytes and update latest data when a full packet is received
     int res = this->vesc.processIncoming();
     if (res > 0) {
-      this->latestData = this->vesc.data;
-      this->latestDataTime = millis();
+      this->latest_data = this->vesc.data;
+      this->latest_data_time = millis();
+      this->data_ready_ = true;
     }
 
     // Rate limit outgoing commands to at most 4 Hz to avoid
@@ -255,9 +264,9 @@ class VescComponent : public PollingComponent {
       this->last_send_time_ = now;
     }
 
+    // Boost
     // Increase the frequency of telemetry updates after a control command
     static uint32_t boost_start = 0;
-    static uint32_t last_poll = 0;
 
     if (this->boost_duration_ && this->boost_interval_ &&
         ((this->rpm_control_ && this->rpm_control_->updated) ||
@@ -284,40 +293,64 @@ class VescComponent : public PollingComponent {
     }
 
     const uint32_t interval = boost_start ? this->boost_interval_ : this->update_interval_;
-    if (now - last_poll < interval)
-      return;
-    last_poll = now;
 
-    this->update();
+    static uint32_t last_publish = 0;
+    if (now - last_publish < interval)
+      return;
+
+    if (this->data_ready_ || first_loop) {
+      this->update();
+      last_publish = now;
+    }
+
+    // ESP_LOGD(TAG, "Requesting values");
+    this->vesc.requestValues();
   }
 
   void update() override {
     if (ble_active_())
       return;
 
-    // TODO We are always publishing "old" data, can this be improved?
-    // Maybe set a flag when a complete telemetry package is parsed,
-    // and publish in the next loop() considering the update_interval_
-    // value set in yaml?
+    static bool first_publish = true;
 
     // ESP_LOGD(TAG, "Publishing");
-    float mrpm = latestData.rpm / motor_pole_pairs_;
+    float mrpm = this->latest_data.rpm / this->motor_pole_pairs_;
     if (this->voltage_sensor_)
-      this->voltage_sensor_->publish_state(latestData.inpVoltage);
+      this->voltage_sensor_->publish_state(this->latest_data.inpVoltage);
     if (this->rpm_sensor_)
       this->rpm_sensor_->publish_state(round(mrpm));
     if (this->duty_sensor_)
-      this->duty_sensor_->publish_state(latestData.dutyCycleNow);
+      this->duty_sensor_->publish_state(this->latest_data.dutyCycleNow);
     if (this->input_current_sensor_)
-      this->input_current_sensor_->publish_state(latestData.avgInputCurrent);
+      this->input_current_sensor_->publish_state(this->latest_data.avgInputCurrent);
     if (this->phase_current_sensor_)
-      this->phase_current_sensor_->publish_state(latestData.avgMotorCurrent);
+      this->phase_current_sensor_->publish_state(this->latest_data.avgMotorCurrent);
     if (this->fet_temp_sensor_)
-      this->fet_temp_sensor_->publish_state(latestData.tempMosfet);
+      this->fet_temp_sensor_->publish_state(this->latest_data.tempMosfet);
     if (this->wattage_sensor_)
-      this->wattage_sensor_->publish_state(latestData.inpVoltage * latestData.avgInputCurrent);
+      this->wattage_sensor_->publish_state(this->latest_data.inpVoltage * latest_data.avgInputCurrent);
     if (this->fault_code_sensor_)
-      this->fault_code_sensor_->publish_state(latestData.error);
+      this->fault_code_sensor_->publish_state(this->latest_data.error);
+    if (this->fault_code_sensor_)
+      this->fault_code_sensor_->publish_state(this->latest_data.error);
+    if (this->fault_text_sensor_) {
+      if (first_publish)
+        this->fault_text_sensor_->publish_state(
+            this->latest_data.error ? mc_fault_code_to_string(this->latest_data.error) : "");
+      else if (this->latest_data.error)
+        this->fault_text_sensor_->publish_state(mc_fault_code_to_string(this->latest_data.error));
+    }
+    if (this->lisp_print_sensor_) {
+      if (!strlen(this->latest_data.lispPrint)) {
+        if (first_publish)
+          this->lisp_print_sensor_->publish_state("");
+      } else {
+        this->lisp_print_sensor_->publish_state(this->latest_data.lispPrint);
+        // Clearing after publish means we only fire HA when a new Lisp message has arrived
+        // since the last update() cycle.
+        this->latest_data.lispPrint[0] = '\0';
+      }
+    }
     if (this->control_mode_sensor_) {
       static char last_control_mode = 'N';
       if (last_control_mode != this->control_mode_) {
@@ -330,12 +363,13 @@ class VescComponent : public PollingComponent {
     if (this->rpm_control_)
       this->rpm_control_->publish_state(round(mrpm));
     if (this->duty_control_)
-      this->duty_control_->publish_state(latestData.dutyCycleNow);
+      this->duty_control_->publish_state(this->latest_data.dutyCycleNow);
     if (this->current_control_)
-      this->current_control_->publish_state(latestData.avgMotorCurrent);
+      this->current_control_->publish_state(this->latest_data.avgMotorCurrent);
 
-    // ESP_LOGD(TAG, "Requesting values");
-    this->vesc.requestValues();
+    if (!first_publish)
+      return;
+    first_publish = false;
   }
 
   void set_uart(esphome::uart::UARTComponent *uart) {
@@ -387,6 +421,8 @@ class VescComponent : public PollingComponent {
   void set_fet_temp_sensor(sensor::Sensor *s) { fet_temp_sensor_ = s; }
   void set_wattage_sensor(sensor::Sensor *s) { wattage_sensor_ = s; }
   void set_fault_code_sensor(sensor::Sensor *s) { fault_code_sensor_ = s; }
+  void set_fault_text_sensor(text_sensor::TextSensor *s) { fault_text_sensor_ = s; }
+  void set_lisp_print_sensor(text_sensor::TextSensor *s) { lisp_print_sensor_ = s; }
   void set_control_mode_sensor(text_sensor::TextSensor *s) { control_mode_sensor_ = s; }
 
   void set_rpm_control(VescControlRpm *n) { rpm_control_ = n; }
@@ -428,6 +464,9 @@ class VescComponent : public PollingComponent {
     this->vesc.setRPM(0.0f);
     this->vesc.setDuty(0.0f);
   }
+
+  void reboot() { esphome::App.safe_reboot(); }
+  void rebootVesc() { this->vesc.sendReboot(); }
 
  protected:
   esphome::uart::UARTComponent *uart_{nullptr};

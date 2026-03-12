@@ -92,6 +92,10 @@ text_sensor:
     control_mode:
       name: "Control Mode"
       id: vesc_control_mode
+    fault_text:
+      name: "VESC Fault"
+    lisp_print:
+      name: "VESC Lisp Output"
 
 # Controls
 
@@ -102,7 +106,7 @@ number:
       name: "Motor Target RPM"
       id: rpm_slider
       min_value: -100
-      max_value: 476
+      max_value: 410
       step: 1
       unit_of_measurement: "RPM"
       mode: SLIDER
@@ -110,8 +114,8 @@ number:
       name: "Motor Target Current"
       id: current_slider
       min_value: 0
-      max_value: 1.25
-      step: 0.005
+      max_value: 2.8
+      step: 0.028
       unit_of_measurement: "A"
       mode: SLIDER
     duty_control:
@@ -137,9 +141,6 @@ switch:
       lambda: id(my_ble_uart_component).set_enabled(false);
 
 button:
-  - platform: restart
-    id: reboot
-    name: "Reboot"
   - platform: template
     id: stop
     name: "Stop"
@@ -147,6 +148,14 @@ button:
     on_press:
       - lambda: |-
           id(my_vesc_hub).stop();
+  - platform: template
+    id: reboot
+    name: "Reboot"
+    icon: "md:recycle"
+    on_press:
+      - lambda: |-
+          id(my_vesc_hub).rebootVesc();
+          id(my_vesc_hub).reboot();
 
 uart:
   id: esp_uart
