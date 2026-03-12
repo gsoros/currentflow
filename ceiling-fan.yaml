@@ -79,7 +79,7 @@ sensor:
       id: vesc_wattage
       filters:
         - delta: 0.005
-    fault_code: # See mc_fault_code struct in helpers.h for fault code definitions
+    fault_code:
       name: "Fault Code"
       id: vesc_fault_code
   - platform: wifi_signal
@@ -93,9 +93,9 @@ text_sensor:
       name: "Control Mode"
       id: vesc_control_mode
     fault_text:
-      name: "VESC Fault"
+      name: "Fault Code"
     lisp_print:
-      name: "VESC Lisp Output"
+      name: "Lisp Output"
 
 # Controls
 

@@ -1,86 +1,420 @@
-# ESPHome VESC Telemetry and Control Component
+## ESPHome VESC Component
 
-Custom ESPHome component for monitoring telemetry and sending commands to a VESC over UART.
+This component allows an ESP32 running ESPHome to communicate with a VESC motor controller over UART.
+Telemetry from the VESC is exposed to Home Assistant and several control modes are available.
 
-The component communicates with a VESC motor controller using the VESC UART protocol, provides controls and exposes telemetry to Home Assistant via ESPHome sensors.
+The component can also coexist with **VESC Tool over BLE**, allowing configuration or debugging without disconnecting the ESPHome device.
 
-The implementation is designed to be **non-blocking** and compatible with ESPHome’s cooperative runtime model. An optional BLE UART bridge is also available for connecting the Vesc Tool app.
+---
 
-## Features
+# Hardware
 
-* UART communication with VESC controllers
-* Non-blocking protocol handling
-* Telemetry exposed as ESPHome sensors
-* Suitable for Home Assistant integration
-* Lightweight and ESP32-friendly
-* Optional BLE UART bridge
+Typical UART wiring:
 
-Example telemetry values that can be exposed:
+| ESP32 | VESC |
+| ----- | ---- |
+| TX    | RX   |
+| RX    | TX   |
+| GND   | GND  |
 
-* Input voltage
-* Motor current
-* RPM
-* Duty cycle
-* FET Temperature
+Default UART speed used by VESC:
 
-## Example ESPHome Configuration
+```
+115200 baud
+```
 
-*TODO provide a working example*
+---
+
+# Installation
+
+Add the component using `external_components`.
 
 ```yaml
 external_components:
-  - source: github://gsoros/currentflow
+  - source:
+      type: local
+      path: components
+    components: [vesc_component, ble_uart_component]
+```
 
+Or use a GitHub source if the repo is added as an external component repository.
+
+---
+
+# Basic Configuration
+
+```yaml
 uart:
-  id: vesc_uart
+  id: esp_uart
   tx_pin: GPIO17
   rx_pin: GPIO16
   baud_rate: 115200
 
-vesc:
-  uart_id: vesc_uart
-  update_interval: 1s
+vesc_component:
+  id: my_vesc_hub
+  uart: esp_uart
+  update_interval: 2s
+  motor_pole_pairs: 21
+
+  # Optional telemetry boost after control input
+  boost_interval: 150
+  boost_duration: 3000
 ```
 
-(Exact configuration may vary depending on the sensors you expose.)
+### Parameters
 
-## Design Notes
+| Option             | Description                                                |
+| ------------------ | ---------------------------------------------------------- |
+| `uart`             | UART bus connected to the VESC                             |
+| `update_interval`  | Base telemetry polling interval                            |
+| `motor_pole_pairs` | Motor pole pairs used for ERPM → mechanical RPM conversion |
+| `boost_interval`   | Faster polling interval after a control change             |
+| `boost_duration`   | Duration of the faster polling period                      |
 
-The original `VescUart` Arduino library performs blocking UART reads.
-This component reworks the protocol logic into a **non-blocking state machine** suitable for ESPHome’s `loop()` execution model.
+---
 
-This avoids watchdog issues and allows ESPHome to continue servicing Wi-Fi, BLE, Home Assistant communication, and other components.
+# Available Sensors
 
-## Third-Party Code and Attribution
+Sensors correspond to fields returned by the VESC `COMM_GET_VALUES` message.
 
-This project incorporates concepts, structures, and portions of code derived from the following open-source projects.
+Example:
 
-### VESC Firmware
+```yaml
+sensor:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
 
-Some data structures, constants, and protocol definitions originate from:
+    voltage:
+      name: "Input Voltage"
 
-VESC BLDC Firmware
-https://github.com/vedderb/bldc
+    rpm:
+      name: "RPM"
 
-Copyright (c) Benjamin Vedder
+    duty:
+      name: "Duty Cycle"
 
-These elements were adapted for use in this ESPHome component and stripped of firmware-specific dependencies.
+    input_current:
+      name: "Input Current"
 
-### VescUart Library
+    phase_current:
+      name: "Phase Current"
 
-The UART communication logic was originally based on the VescUart Arduino library:
+    fet_temp:
+      name: "FET Temperature"
 
-https://github.com/SolidGeek/VescUart
+    wattage:
+      name: "Wattage"
 
-Copyright (c) SolidGeek
+    fault_code:
+      name: "Fault Code"
+```
 
-The implementation in this project has been **significantly modified**, including:
+### Sensor Descriptions
 
-* Conversion to a non-blocking architecture
-* Refactoring for ESPHome component structure
-* Removal of Arduino-specific assumptions
-* Integration with ESPHome UART handling
+| Sensor        | Description                     |
+| ------------- | ------------------------------- |
+| Voltage       | DC input voltage                |
+| RPM           | Mechanical motor RPM            |
+| Duty          | PWM duty cycle                  |
+| Input Current | Current drawn from supply       |
+| Phase Current | Motor phase current             |
+| FET Temp      | Temperature of the MOSFET stage |
+| Wattage       | Calculated power consumption    |
+| Fault Code    | Raw numeric VESC fault code     |
 
+---
+
+# Text Sensors
+
+Additional textual telemetry can also be exposed.
+
+```yaml
+text_sensor:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+
+    control_mode:
+      name: "Control Mode"
+
+    fault_text:
+      name: "VESC Fault"
+
+    lisp_print:
+      name: "VESC Lisp Output"
+```
+
+### Text Sensor Descriptions
+
+| Sensor       | Description                               |
+| ------------ | ----------------------------------------- |
+| Control Mode | Current control mode (`R`, `D`, `C`, `N`) |
+| Fault Text   | Human-readable fault description          |
+| Lisp Output  | Messages printed from VESC Lisp scripts   |
+
+---
+
+# Motor Control
+
+Three control modes are available. Only one mode is active at a time.
+
+Limits are configured using the **standard ESPHome Number component parameters** (`min_value`, `max_value`, `step`).
+
+Example:
+
+```yaml
+number:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+
+    rpm_control:
+      name: "Motor Target RPM"
+      min_value: -100
+      max_value: 410
+      step: 1
+
+    current_control:
+      name: "Motor Target Current"
+      min_value: 0
+      max_value: 2.8
+      step: 0.028
+
+    duty_control:
+      name: "Motor Target Duty Cycle"
+      min_value: 0
+      max_value: 0.5
+      step: 0.005
+```
+
+### Control Modes
+
+| Mode    | Description           |
+| ------- | --------------------- |
+| RPM     | Target mechanical RPM |
+| Current | Target motor current  |
+| Duty    | Raw duty cycle        |
+
+If no control input is active, the controller sends **0 A current**, allowing the motor to coast.
+
+---
+
+# BLE Bridge
+
+This project optionally includes a **BLE UART bridge** allowing VESC Tool to connect through the ESP32.
+
+Example control switch:
+
+```yaml
+switch:
+  - platform: template
+    name: "BLE UART Bridge"
+
+    lambda: |-
+      return id(my_ble_uart_component).is_enabled();
+
+    turn_on_action:
+      lambda: id(my_ble_uart_component).set_enabled(true);
+
+    turn_off_action:
+      lambda: id(my_ble_uart_component).set_enabled(false);
+```
+
+When VESC Tool connects via BLE:
+
+* the ESPHome component temporarily **stops accessing the UART**
+* the BLE bridge forwards packets directly to the VESC
+
+This prevents packet corruption caused by two devices using the same serial interface.
+
+---
+
+# Example System Architecture
+
+```mermaid
+flowchart LR
+
+HA[Home Assistant]
+
+ESP[ESPHome Firmware<br>VescComponent]
+
+UART[UART Bus]
+
+VESC[VESC Controller]
+
+BLE[BLE UART Bridge]
+
+TOOL[VESC Tool]
+
+HA -->|API| ESP
+ESP -->|Telemetry| HA
+
+ESP --> UART
+UART --> VESC
+
+TOOL <-->|BLE| BLE
+BLE <-->|UART Forwarding| VESC
+
+ESP -.UART paused when BLE active.- BLE
+```
+
+---
+
+# Configuration Reference
+
+## `vesc_component`
+
+| Option             | Type      | Default      | Description                                                         |
+| ------------------ | --------- | ------------ | ------------------------------------------------------------------- |
+| `uart`             | ID        | **required** | UART bus connected to the VESC controller                           |
+| `update_interval`  | Time      | `1s`         | Base interval for requesting telemetry from the VESC                |
+| `motor_pole_pairs` | Integer   | `21`         | Number of motor pole pairs used to convert ERPM to mechanical RPM   |
+| `boost_interval`   | Time (ms) | `150ms`      | Faster telemetry polling interval immediately after a control input |
+| `boost_duration`   | Time (ms) | `3000ms`     | Duration of the boosted polling period                              |
+
+### Notes
+
+`motor_pole_pairs` affects how RPM is reported:
+
+```
+mechanical_rpm = erpm / motor_pole_pairs
+```
+
+Make sure this value matches the motor connected to your VESC.
+
+---
+## Sensor Platform
+
+```yaml
+sensor:
+  - platform: vesc_component
+```
+
+| Option          | Description                      |
+| --------------- | -------------------------------- |
+| `voltage`       | VESC input voltage               |
+| `rpm`           | Mechanical motor RPM             |
+| `duty`          | PWM duty cycle                   |
+| `input_current` | Current drawn from the DC source |
+| `phase_current` | Motor phase current              |
+| `fet_temp`      | MOSFET temperature               |
+| `wattage`       | Calculated power consumption     |
+| `fault_code`    | Raw VESC fault code              |
+
+---
+
+## Number Platform (Motor Control)
+
+```yaml
+number:
+  - platform: vesc_component
+```
+
+| Entity            | Description           |
+| ----------------- | --------------------- |
+| `rpm_control`     | Target mechanical RPM |
+| `current_control` | Target motor current  |
+| `duty_control`    | Target duty cycle     |
+
+Limits are configured using standard ESPHome parameters:
+
+```
+min_value
+max_value
+step
+```
+
+Example:
+
+```yaml
+rpm_control:
+  name: "Fan RPM"
+  min_value: -100
+  max_value: 410
+  step: 1
+```
+
+---
+
+## Text Sensor Platform
+
+```yaml
+text_sensor:
+  - platform: vesc_component
+```
+
+| Entity         | Description                                 |
+| -------------- | ------------------------------------------- |
+| `control_mode` | Active control mode (`R`, `C`, `D`, or `N`) |
+| `fault_text`   | Human-readable VESC fault description       |
+| `lisp_print`   | Output printed from VESC Lisp scripts       |
+
+---
+
+# Example: Ceiling Fan Controller
+
+This project was originally built to monitor and control a **VESC-driven ceiling fan** from Home Assistant.
+
+The ESP32 communicates with the VESC over UART and exposes telemetry such as RPM, power consumption, and temperature. Fan speed can be controlled directly from the Home Assistant UI.
+
+Example configuration:
+
+```yaml
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [vesc_component, ble_uart_component]
+
+uart:
+  id: esp_uart
+  tx_pin: GPIO17
+  rx_pin: GPIO16
+  baud_rate: 115200
+
+vesc_component:
+  id: my_vesc_hub
+  uart: esp_uart
+  update_interval: 2s
+  motor_pole_pairs: 21
+  boost_interval: 150
+  boost_duration: 3000
+
+sensor:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+
+    voltage:
+      name: "Fan Supply Voltage"
+
+    rpm:
+      name: "Fan RPM"
+
+    wattage:
+      name: "Fan Power"
+
+    fet_temp:
+      name: "VESC Temperature"
+
+number:
+  - platform: vesc_component
+    vesc_id: my_vesc_hub
+
+    rpm_control:
+      name: "Fan Speed"
+      min_value: 0
+      max_value: 410
+      step: 1
+```
+
+This exposes:
+
+* live **fan RPM**
+* **power consumption**
+* **VESC temperature**
+* a **speed control slider** in Home Assistant
+
+Adding a dashboard card allows the fan to be controlled and monitored from a single interface.
+
+---
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
@@ -98,7 +432,12 @@ implementation compatible with ESPHome’s execution model.
 
 See the LICENSE file for full details.
 
-## Acknowledgements
+---
+# Acknowledgements
 
-* Benjamin Vedder for the VESC firmware and protocol design
-* SolidGeek for the original VescUart library
+Parts of the VESC communication protocol originate from:
+
+* VESC firmware by **Benjamin Vedder**
+* The **VescUart** Arduino library by **SolidGeek**
+
+Some adaptations were made to integrate the protocol with ESPHome’s runtime model.
