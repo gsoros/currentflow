@@ -6,6 +6,23 @@ Telemetry from the VESC is exposed to Home Assistant and several control modes a
 The component can also coexist with **VESC Tool over BLE**, allowing configuration or debugging without disconnecting the ESPHome device.
 
 ---
+## ⚠ Safety Notice
+
+Brushless DC motors controlled by a VESC can produce significant torque and high rotational speeds. Improper configuration or control can result in equipment damage or personal injury.
+
+Before using this component:
+
+* Use the excellent **[VESC Tool](https://vesc-project.com/vesc_tool)** to configure the firmware in your controller, set appropriate current and rpm limits.
+* **Verify all control limits** (`min_value`, `max_value`, `step`) in your ESPHome configuration.
+* Ensure limits are appropriate for **your motor, controller, power supply, and mechanical system**.
+* Start with **very conservative limits** and increase them gradually during testing.
+* Make sure the motor and any connected mechanism are **securely mounted** and cannot cause harm if they start unexpectedly.
+* Always test new configurations with **physical access to power disconnects or emergency stop controls**.
+
+The author of this project cannot guarantee safe operation in all environments.
+Use at your own risk and ensure your system is designed with appropriate safety margins.
+
+---
 
 # Hardware
 
@@ -266,7 +283,7 @@ ESP -.UART paused when BLE active.- BLE
 | ------------------ | --------- | ------------ | ------------------------------------------------------------------- |
 | `uart`             | ID        | **required** | UART bus connected to the VESC controller                           |
 | `update_interval`  | Time      | `1s`         | Base interval for requesting telemetry from the VESC                |
-| `motor_pole_pairs` | Integer   | `21`         | Number of motor pole pairs used to convert ERPM to mechanical RPM   |
+| `motor_pole_pairs` | Integer   | `15`         | Number of motor pole pairs used to convert ERPM to mechanical RPM   |
 | `boost_interval`   | Time (ms) | `150ms`      | Faster telemetry polling interval immediately after a control input |
 | `boost_duration`   | Time (ms) | `3000ms`     | Duration of the boosted polling period                              |
 

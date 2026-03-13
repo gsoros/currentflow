@@ -32,4 +32,4 @@ Testing & CI
 
 Licensing & attribution
 -----------------------
-- Preserve original license headers for any copied code. Add a `NOTICE` file summarizing third-party attributions and license text.
+- Preserve original license headers for any copied code.

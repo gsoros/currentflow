@@ -1,6 +1,3 @@
-*** Toggle BLE Bridge
-
-
 *** EH Native Fan Component ***
 
 #include "esphome/components/fan/fan.h"
@@ -54,57 +51,5 @@ class VescFan : public fan::Fan, public Component {
 } // namespace esphome
 
 
-
-*** Buffered TX ***
-
-static const size_t MAX_BUFFER = 512;
-uint8_t buffer[MAX_BUFFER];
-size_t index = 0;
-uint32_t last_byte_time = 0;
-
-void loop() override {
-    // 1. Determine current safe chunk size (MTU - 3 bytes header)
-    size_t current_mtu = pServer->getPeerMTU(pServer->getConnId()) - 3;
-    // Fallback if not connected or negotiated yet
-    if (current_mtu > MAX_BUFFER || current_mtu < 20) current_mtu = 20;
-
-    // 2. Collect bytes
-    while (this->available() && index < MAX_BUFFER) {
-        buffer[index++] = this->read();
-        last_byte_time = millis();
-
-        // Flush immediately if we hit the current MTU limit
-        if (index >= current_mtu) {
-            flush_buffer(index);
-        }
-    }
-
-    // 3. Timeout: Flush partial packets after 15ms of silence
-    if (index > 0 && (millis() - last_byte_time > 15)) {
-        flush_buffer(index);
-    }
-}
-
-void flush_buffer(size_t length) {
-    if (pServer->getConnectedCount() <= 0) return;
-    pCharacteristic->setValue(buffer, length);
-    pCharacteristic->notify();
-    index = 0;
-}
-
-
-/// Fix for the slider bounce
-void set_target_speed(float speed) {
-  this->send_vesc_command(speed);
-
-  // TODO check is update_interval is already small?
-
-  // Set polling to 250ms for the next 5 seconds
-  this->set_interval("fast_poll", 250, [this]() { this->update(); });
-
-  this->set_timeout("stop_fast_poll", 5000, [this]() {
-    this->cancel_interval("fast_poll");
-  });
-}
 
 

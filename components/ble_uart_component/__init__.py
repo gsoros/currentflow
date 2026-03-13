@@ -19,26 +19,22 @@ CONFIG_SCHEMA = cv.Schema(
         cv.GenerateID(): cv.declare_id(
             BleUartComponent
         ),  # auto-generate C++ variable name if not given
-        cv.Optional(CONF_DEVICE_NAME, default="VESC BLE UART Bridge"): cv.string,
+        cv.Optional(CONF_DEVICE_NAME, default="VESC BLE UART"): cv.string,
     }
 ).extend(uart.UART_DEVICE_SCHEMA)
 
 
 async def to_code(config):
 
-    cg.add_library("h2zero/NimBLE-Arduino", None)
-
     cg.add_library("Preferences", None)
-
+    cg.add_library("h2zero/NimBLE-Arduino", None)
     cg.add_build_flag("-DCONFIG_BT_ENABLED")
 
     # technically IDF-flavoured even on Arduino framework — it still controls
     # what gets compiled into the BT stack. A bit cheeky but that's how ESPHome rolls.
-    # add_idf_sdkconfig_option("CONFIG_COMPILER_CXX_EXCEPTIONS", True)
     add_idf_sdkconfig_option("CONFIG_BT_ENABLED", True)
     add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ENABLED", True)
     add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ROLE_PERIPHERAL", True)
-    # add_idf_sdkconfig_option("CONFIG_NIMBLE_CPP_LOG_LEVEL", 0)  # 0=debug!!!
 
     var = cg.new_Pvariable(config[CONF_ID])
 

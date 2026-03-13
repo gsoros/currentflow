@@ -7,12 +7,12 @@ esphome:
     #priority: 200
     then:
       - lambda: "id(my_vesc_ptr) = id(my_vesc_hub);"
-  platformio_options:
-    build_flags:
-      - -DUSE_NIMBLE
-      - -DCONFIG_BT_ENABLED=1
-      - -DCONFIG_BT_NIMBLE_ENABLED=1
-      - -DCONFIG_BT_CONTROLLER_ENABLED=1
+  #platformio_options:
+  #  build_flags:
+  #    - -DUSE_NIMBLE
+  #    - -DCONFIG_BT_ENABLED=1
+  #    - -DCONFIG_BT_NIMBLE_ENABLED=1
+  #    - -DCONFIG_BT_CONTROLLER_ENABLED=1
 
 esp32:
   board: lolin32_lite

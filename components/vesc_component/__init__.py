@@ -5,7 +5,8 @@ from esphome.components import uart
 import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_UPDATE_INTERVAL
 
-# DEPENDENCIES = ["sensor", "text_sensor", "number", "uart"]
+DEPENDENCIES = ["uart"]
+AUTO_LOAD = ["number", "sensor", "text_sensor"]
 
 CONF_VESC_ID = "vesc_id"
 CONF_UART = "uart"
@@ -44,6 +45,12 @@ async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
+    if CONF_BLE_UART_COMPONENT_ID in config:
+        cg.add_define("USE_BLE_UART_COMPONENT")
+
+    # This tells the compiler to look inside the current component folder for headers like helpers.h
+    cg.add_build_flag("-I" + os.path.dirname(__file__))
+
     # UART
     uart_obj = await cg.get_variable(config[CONF_UART])
     cg.add(var.set_uart(uart_obj))
@@ -73,6 +80,3 @@ async def to_code(config):
 
     # Optional boost interval
     cg.add(var.set_boost_interval(config[CONF_BOOST_INTERVAL]))
-
-    # This tells the compiler to look inside the current component folder for headers like helpers.h
-    cg.add_build_flag("-I" + os.path.dirname(__file__))

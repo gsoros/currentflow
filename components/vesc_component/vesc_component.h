@@ -15,7 +15,9 @@ vesc_component.h
 #include "shared.h"
 #include "VescUart.h"
 #include "esphome/components/uart/uart.h"
+#ifdef USE_BLE_UART_COMPONENT
 #include "../ble_uart_component/ble_uart_component.h"
+#endif
 
 namespace esphome {
 namespace vesc_component {
@@ -429,10 +431,12 @@ class VescComponent : public PollingComponent {
   void set_duty_control(VescControlDuty *n) { duty_control_ = n; }
   void set_current_control(VescControlCurrent *n) { current_control_ = n; }
 
+#ifdef USE_BLE_UART_COMPONENT
   void set_ble_uart_component(ble_uart_component::BleUartComponent *c) {
     ESP_LOGD(TAG, "Setting BLE UART component: %p", c);
     ble_uart_component_ = c;
   }
+#endif
 
   void send_rpm_command() {
     if (!this->rpm_control_)  // not defined in yaml
@@ -473,7 +477,9 @@ class VescComponent : public PollingComponent {
   esphome::uart::UARTComponent *debug_uart_{nullptr};
   UARTComponentStream *uart_adapter_{nullptr};
   UARTComponentStream *debug_adapter_{nullptr};
+#ifdef USE_BLE_UART_COMPONENT
   ble_uart_component::BleUartComponent *ble_uart_component_{nullptr};
+#endif
   uint32_t boost_interval_ = 250;   // default 250ms
   uint32_t boost_duration_ = 5000;  // default 5s
 
@@ -522,11 +528,15 @@ class VescComponent : public PollingComponent {
   }
 
   bool ble_active_() const {
+#ifdef USE_BLE_UART_COMPONENT
     if (ble_uart_component_ == nullptr) {
       ESP_LOGD(TAG, "BLE UART component not set, treating BLE as inactive");
       return false;
     }
     return ble_uart_component_->is_ble_connected();
+#else
+    return false;
+#endif
   }
 
 };  // class VescComponent
