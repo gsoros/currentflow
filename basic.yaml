@@ -51,11 +51,11 @@ number:
 # Home Assistant API
 api:
   encryption:
-    key: "+yVKF7n3gKxupWNXsMz05HtMTbSaohGJO+usOoCLyLQ="
+    key: !secret api_encryption_key
 
 ota:
   - platform: esphome
-    password: "67ea0784bdf4766ea7f020ff7939d8c1"
+    password: !secret ota_password
 
 wifi:
   ssid: !secret wifi_ssid

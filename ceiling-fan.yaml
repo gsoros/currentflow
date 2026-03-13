@@ -52,8 +52,8 @@ sensor:
     rpm:
       name: "RPM"
       id: vesc_rpm
-      filters:
-        - delta: 1
+      #filters:
+      #  - delta: 1.0
     duty:
       name: "Duty Cycle"
       id: vesc_duty
@@ -75,7 +75,7 @@ sensor:
       filters:
         - delta: 0.2
     wattage:
-      name: "Wattage"
+      name: "Power"
       id: vesc_wattage
       filters:
         - delta: 0.005
@@ -198,11 +198,11 @@ ble_uart_component:
 # Home Assistant API
 api:
   encryption:
-    key: "+yVKF7n3gKxupWNXsMz05HtMTbSaohGJO+usOoCLyLQ="
+    key: !secret api_encryption_key
 
 ota:
   - platform: esphome
-    password: "67ea0784bdf4766ea7f020ff7939d8c1"
+    password: !secret ota_password
 
 wifi:
   ssid: !secret wifi_ssid

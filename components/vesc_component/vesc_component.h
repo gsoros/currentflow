@@ -148,8 +148,8 @@ class VescComponent : public PollingComponent {
   VescControlCurrent *current_control_{nullptr};
 
   int motor_pole_pairs_ = 10;
-
   ulong setup_done = 0;
+  uint32_t update_interval_in_config_ = 2000;
 
  public:
   void setup() override {
@@ -168,8 +168,8 @@ class VescComponent : public PollingComponent {
     }
 
     // Disable scheduler. We take care of calling update() in loop()
-    // this->update_interval_ will still hold the value from yaml.
     // Yes, there will be an unexpected update() call in about 50 days ;)
+    this->update_interval_in_config_ = this->update_interval_;
     this->set_update_interval(UINT32_MAX);
 
     this->setup_done = millis();
@@ -203,7 +203,11 @@ class VescComponent : public PollingComponent {
         this->uart_adapter_->flush();
       return;
     }
-    first_loop = false;
+    if (first_loop) {
+      ESP_LOGD(TAG, "First loop: calling this->vesc.requestValues()");
+      this->vesc.requestValues();
+      first_loop = false;
+    }
 
     // Safety: if the hardware buffer becomes extremely full, discard a
     // bounded number of bytes and reset the parser so we can recover.
@@ -238,7 +242,7 @@ class VescComponent : public PollingComponent {
 
     // Rate limit outgoing commands to at most 4 Hz to avoid
     // overwhelming the VESC or the serial connection
-    if (now - this->last_send_time_ > 250) {
+    if (now - this->last_command_send_time_ > 250) {
       if (this->get_target_rpm() > 10.0f) {  // Small deadzone
         this->control_mode_ = 'R';
         this->send_rpm_command();
@@ -263,7 +267,7 @@ class VescComponent : public PollingComponent {
         // TODO add config option to disable this to allow regen braking?
         this->vesc.setCurrent(0.0f);
       }
-      this->last_send_time_ = now;
+      this->last_command_send_time_ = now;
     }
 
     // Boost
@@ -294,19 +298,23 @@ class VescComponent : public PollingComponent {
       boost_start = 0;
     }
 
-    const uint32_t interval = boost_start ? this->boost_interval_ : this->update_interval_;
+    const uint32_t interval = boost_start ? this->boost_interval_ : this->update_interval_in_config_;
 
     static uint32_t last_publish = 0;
-    if (now - last_publish < interval)
+    if (now - last_publish < interval) {
+      // static uint32_t last_publish_debug_log = 0;
+      // if (now - last_publish_debug_log < 500)
+      //   return;
+      // ESP_LOGD(TAG, "last published %" PRIu32 " ms ago, interval: %" PRIu32 " ms", now - last_publish, interval);
+      // last_publish_debug_log = now;
       return;
+    }
 
-    if (this->data_ready_ || first_loop) {
+    if (this->data_ready_) {
+      // ESP_LOGD(TAG, "Calling this->update()");
       this->update();
       last_publish = now;
     }
-
-    // ESP_LOGD(TAG, "Requesting values");
-    this->vesc.requestValues();
   }
 
   void update() override {
@@ -368,6 +376,9 @@ class VescComponent : public PollingComponent {
       this->duty_control_->publish_state(this->latest_data.dutyCycleNow);
     if (this->current_control_)
       this->current_control_->publish_state(this->latest_data.avgMotorCurrent);
+
+    // ESP_LOGD(TAG, "Requesting values");
+    this->vesc.requestValues();
 
     if (!first_publish)
       return;
@@ -483,7 +494,7 @@ class VescComponent : public PollingComponent {
   uint32_t boost_interval_ = 250;   // default 250ms
   uint32_t boost_duration_ = 5000;  // default 5s
 
-  uint32_t last_send_time_{0};
+  uint32_t last_command_send_time_{0};
   char control_mode_ = 'N';  // R: RPM, D: Duty Cycle, C: Current, N: None
 
   float get_target_rpm() {
