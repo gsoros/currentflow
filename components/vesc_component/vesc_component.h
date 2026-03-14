@@ -24,53 +24,34 @@ namespace vesc_component {
 
 const char *TAG = "VescComponent";
 
-class VescControlRpm : public number::Number {
+class VescControl : public number::Number {
  public:
+  void change_speed_by_percent(int8_t direction, float step_percent) {
+    float range = traits.get_max_value() - traits.get_min_value();
+    float delta = range * (step_percent / 100.0f) * (direction > 0 ? 1 : -1);
+
+    auto call = this->make_call();
+    call.set_value(std::clamp(this->target + delta, traits.get_min_value(), traits.get_max_value()));
+    call.perform();
+  }
+
   void control(float v) override {
-    // ESP_LOGD("VescControlRpm", "VescControlRpm::control(%.0f) /%.0f/", v, this->target);
-    float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
-    if (new_target == this->target)
+    if (v == this->target)
       return;
-    this->target = new_target;
-    this->updated = true;
-    // ESP_LOGD("VescControlRpm", "VescControlRpm target updated");
+    // When control() is called by call.perform(), bounds are checked.
+    // We check them here so we can also call control() directly.
+    v = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
+    this->target = v;
+    this->last_update = millis();
   }
 
   float target = 0.0f;
-  bool updated = false;
+  uint32_t last_update = 0;
 };
 
-class VescControlDuty : public number::Number {
- public:
-  void control(float v) override {
-    // ESP_LOGD("VescControlDuty", "VescControlDuty::control(%.3f) /%.3f/", v, this->target);
-    float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
-    if (new_target == this->target)
-      return;
-    this->target = new_target;
-    this->updated = true;
-    // ESP_LOGD("VescControlDuty", "VescControlDuty target updated");
-  }
-
-  float target = 0.0f;
-  bool updated = false;
-};
-
-class VescControlCurrent : public number::Number {
- public:
-  void control(float v) override {
-    // ESP_LOGD("VescControlCurrent", "VescControlCurrent::control(%.3f) /%.3f/", v, this->target);
-    float new_target = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
-    if (new_target == this->target)
-      return;
-    this->target = new_target;
-    this->updated = true;
-    // ESP_LOGD("VescControlCurrent", "VescControlCurrent target updated");
-  }
-
-  float target = 0.0f;
-  bool updated = false;
-};
+class VescControlRpm : public VescControl {};
+class VescControlDuty : public VescControl {};
+class VescControlCurrent : public VescControl {};
 
 // Adapter: wrap esphome::uart::UARTComponent with a minimal Arduino Stream
 // implementation so existing VescUart (which expects Stream*) can use it.
@@ -148,8 +129,9 @@ class VescComponent : public PollingComponent {
   VescControlCurrent *current_control_{nullptr};
 
   int motor_pole_pairs_ = 10;
+  float step_percent_ = 1.0f;  // step to use in faster() and slower()
   ulong setup_done = 0;
-  uint32_t update_interval_in_config_ = 2000;
+  uint32_t update_interval_from_config_ = 2000;
 
  public:
   void setup() override {
@@ -169,7 +151,7 @@ class VescComponent : public PollingComponent {
 
     // Disable scheduler. We take care of calling update() in loop()
     // Yes, there will be an unexpected update() call in about 50 days ;)
-    this->update_interval_in_config_ = this->update_interval_;
+    this->update_interval_from_config_ = this->update_interval_;
     this->set_update_interval(UINT32_MAX);
 
     this->setup_done = millis();
@@ -275,19 +257,13 @@ class VescComponent : public PollingComponent {
     static uint32_t boost_start = 0;
 
     if (this->boost_duration_ && this->boost_interval_ &&
-        ((this->rpm_control_ && this->rpm_control_->updated) ||
-         (this->current_control_ && this->current_control_->updated) ||
-         (this->duty_control_ && this->duty_control_->updated))) {
-      // ESP_LOGD(TAG, "a control is flagged as updated");
+        ((this->rpm_control_ && (now - this->rpm_control_->last_update < this->boost_duration_)) ||
+         (this->current_control_ && (now - this->current_control_->last_update < this->boost_duration_)) ||
+         (this->duty_control_ && (now - this->duty_control_->last_update < this->boost_duration_)))) {
+      // ESP_LOGD(TAG, "a control has been updated");
       if (!boost_start)
-        // ESP_LOGD(TAG, "Poll boost start");
+        // ESP_LOGD(TAG, "Boost start");
         boost_start = now;
-      if (this->rpm_control_)
-        this->rpm_control_->updated = false;
-      if (this->current_control_)
-        this->current_control_->updated = false;
-      if (this->duty_control_)
-        this->duty_control_->updated = false;
     }
 
     // if (boost_start)
@@ -298,7 +274,7 @@ class VescComponent : public PollingComponent {
       boost_start = 0;
     }
 
-    const uint32_t interval = boost_start ? this->boost_interval_ : this->update_interval_in_config_;
+    const uint32_t interval = boost_start ? this->boost_interval_ : this->update_interval_from_config_;
 
     static uint32_t last_publish = 0;
     if (now - last_publish < interval) {
@@ -414,17 +390,18 @@ class VescComponent : public PollingComponent {
       this->uart_->set_rx_buffer_size(s);
   }
 
-  void set_motor_pole_pairs(float val) {
-    uint16_t pp = (uint16_t) clamp(val, 0.0f, (float) UINT16_MAX);
-    if (pp <= 0) {
+  void set_motor_pole_pairs(float f) {
+    uint16_t mpp = (uint16_t) clamp(f, 0.0f, (float) UINT16_MAX);
+    if (mpp <= 0) {
       ESP_LOGE(TAG, "not setting 0 pole pairs");
       return;
     }
-    motor_pole_pairs_ = pp;
+    motor_pole_pairs_ = mpp;
   }
 
+  void set_step_percent(float f) { this->step_percent_ = f; }
   void set_boost_interval(uint32_t i) { this->boost_interval_ = i; }
-  void set_boost_duration(uint32_t d) { this->boost_duration_ = d; }
+  void set_boost_duration(uint32_t i) { this->boost_duration_ = i; }
 
   void set_voltage_sensor(sensor::Sensor *s) { voltage_sensor_ = s; }
   void set_rpm_sensor(sensor::Sensor *s) { rpm_sensor_ = s; }
@@ -469,6 +446,25 @@ class VescComponent : public PollingComponent {
       return;
     // ESP_LOGI(TAG, "Sending Current command: %.2f A", get_target_current());
     this->vesc.setCurrent(current_control_->target);
+  }
+
+  void faster() { this->change_speed(1); }
+  void slower() { this->change_speed(-1); }
+  void change_speed(int8_t direction) {
+    if (direction == 0)
+      return;
+
+    VescControl *ctrl = nullptr;
+    if (this->control_mode_ == 'R' || this->control_mode_ == 'N')
+      ctrl = (VescControl *) rpm_control_;
+    else if (this->control_mode_ == 'C')
+      ctrl = (VescControl *) current_control_;
+    else if (this->control_mode_ == 'D')
+      ctrl = (VescControl *) duty_control_;
+
+    if (ctrl) {
+      ctrl->change_speed_by_percent(direction, this->step_percent_);
+    }
   }
 
   void stop() {

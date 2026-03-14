@@ -17,6 +17,7 @@ CONF_BLE_UART_COMPONENT_ID = "ble_uart_component_id"
 CONF_POLE_PAIRS = "motor_pole_pairs"
 CONF_BOOST_INTERVAL = "boost_interval"
 CONF_BOOST_DURATION = "boost_duration"
+CONF_STEP_PERCENT = "step_percent"
 
 # 1. Define namespace and class
 vesc_component_ns = cg.esphome_ns.namespace("vesc_component")
@@ -36,6 +37,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_POLE_PAIRS, default=15): cv.int_range(min=1, max=100),
         cv.Optional(CONF_BOOST_DURATION, default=5000): cv.int_range(min=0, max=100000),
         cv.Optional(CONF_BOOST_INTERVAL, default=250): cv.int_range(min=100, max=1000),
+        cv.Optional(CONF_STEP_PERCENT, default=1.0): cv.float_range(min=0.00, max=10),
     }
 ).extend(cv.polling_component_schema("1s"))
 
@@ -64,7 +66,7 @@ async def to_code(config):
     cg.add(var.set_timeout_ms(config[CONF_TIMEOUT_MS]))
     cg.add(var.set_rx_buffer_size(config[CONF_RX_BUF]))
 
-    # Optional update interval (duration)
+    # Optional update interval
     if CONF_UPDATE_INTERVAL in config:
         cg.add(var.set_update_interval(config[CONF_UPDATE_INTERVAL]))
 
@@ -80,3 +82,6 @@ async def to_code(config):
 
     # Optional boost interval
     cg.add(var.set_boost_interval(config[CONF_BOOST_INTERVAL]))
+
+    # Optional step percent
+    cg.add(var.set_step_percent(config[CONF_STEP_PERCENT]))

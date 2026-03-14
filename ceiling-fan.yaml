@@ -33,6 +33,12 @@ logger:
   baud_rate: 0 #disabled
   #baud_rate: 115200
 
+#external_components:
+#  - source: components
+
+#external_components:
+#  - source: github://gsoros/currentflow
+
 external_components:
   - source:
       type: local
@@ -47,41 +53,52 @@ sensor:
     voltage:
       name: "Input Voltage"
       id: vesc_voltage
+      icon: mdi:lightning-bolt
       filters:
         - delta: 0.1
     rpm:
-      name: "RPM"
+      name: "Speed"
       id: vesc_rpm
-      #filters:
-      #  - delta: 1.0
+      icon: mdi:speedomether
+      filters:
+        - delta: 0.5
     duty:
       name: "Duty Cycle"
       id: vesc_duty
+      icon: mdi:percent
       filters:
         - delta: 0.005
     input_current:
       name: "Input Current"
       id: vesc_input_current
+      icon: mdi:current-dc
       filters:
         - delta: 0.005
     phase_current:
       name: "Phase Current"
       id: vesc_phase_current
+      icon: mdi:current-ac
       filters:
-        - delta: 0.03
+        #- delta: 0.03
+        - or:
+          - delta: .5 # Publish if it's a big jump
+          - throttle: 5s # But always publish at least every 5s
     fet_temp:
       name: "FET Temperature"
       id: vesc_fet_temp
+      icon: mdi:thermometer
       filters:
         - delta: 0.2
     wattage:
       name: "Power"
       id: vesc_wattage
+      icon: mdi:arm-flex
       filters:
         - delta: 0.005
     fault_code:
       name: "Fault Code"
       id: vesc_fault_code
+      icon: mdi:alert
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
@@ -92,10 +109,13 @@ text_sensor:
     control_mode:
       name: "Control Mode"
       id: vesc_control_mode
+      icon: mdi:electric-switch
     fault_text:
-      name: "Fault Code"
+      name: "Fault Text"
+      icon: mdi:note-alert
     lisp_print:
       name: "Lisp Output"
+      icon: mdi:text
 
 # Controls
 
@@ -103,13 +123,14 @@ number:
   - platform: vesc_component
     vesc_id: my_vesc_hub
     rpm_control:
-      name: "Motor Target RPM"
+      name: "Motor Target Speed"
       id: rpm_slider
-      min_value: -100
+      min_value: 0
       max_value: 410
       step: 1
       unit_of_measurement: "RPM"
       mode: SLIDER
+      icon: "mdi:speedometer"
     current_control:
       name: "Motor Target Current"
       id: current_slider
@@ -118,6 +139,7 @@ number:
       step: 0.028
       unit_of_measurement: "A"
       mode: SLIDER
+      icon: "mdi:current-ac"
     duty_control:
       name: "Motor Target Duty Cycle"
       id: duty_slider
@@ -126,6 +148,7 @@ number:
       step: 0.005
       unit_of_measurement: "%"
       mode: SLIDER
+      icon: "mdi:percent"
 
 switch:
   - platform: template
@@ -144,14 +167,28 @@ button:
   - platform: template
     id: stop
     name: "Stop"
-    icon: "md:cancel"
+    icon: "mdi:cancel"
     on_press:
       - lambda: |-
           id(my_vesc_hub).stop();
   - platform: template
+    id: faster
+    name: "Faster"
+    icon: "mdi:rabbit"
+    on_press:
+      - lambda: |-
+          id(my_vesc_hub).faster();
+  - platform: template
+    id: slower
+    name: "Slower"
+    icon: "mdi:snail"
+    on_press:
+      - lambda: |-
+          id(my_vesc_hub).slower();
+  - platform: template
     id: reboot
     name: "Reboot"
-    icon: "md:recycle"
+    icon: "mdi:recycle"
     on_press:
       - lambda: |-
           id(my_vesc_hub).rebootVesc();
@@ -182,6 +219,7 @@ vesc_component:
   motor_pole_pairs: 21 # Used for RPM <-> eRPM conversion
   boost_interval: 150 # Frequency of telemetry updates after a control input (ms) (0 to disable)
   boost_duration: 3000 # Duration of the snappy telemetry (ms) (0 to disable)
+  step_percent: 0.5 # step for the Faster and Slower buttons
 
 # Define the global variable to store our custom component instance
 globals:
