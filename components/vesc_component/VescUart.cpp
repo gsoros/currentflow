@@ -309,7 +309,7 @@ bool VescUart::processReadPayload(uint8_t *payload, size_t len) {
       index += 4;  // skip id
       index += 4;
       data.dutyCycleNow = buffer_get_float16(payload, 1000.0, &index);
-      data.rpm = buffer_get_float32(payload, 1.0, &index);
+      data.speed = buffer_get_float32(payload, 1.0, &index);
       data.inpVoltage = buffer_get_float16(payload, 10.0, &index);
       data.ampHours = buffer_get_float32(payload, 10000.0, &index);
       data.ampHoursCharged = buffer_get_float32(payload, 10000.0, &index);
@@ -345,8 +345,8 @@ bool VescUart::processReadPayload(uint8_t *payload, size_t len) {
   }
 }
 
-void VescUart::setRPM(float rpm, uint8_t canId) {
-  // ESP_LOGD("VescUart", "VescUart::setRPM called with rpm: %.0f, canId: %d", rpm, canId);
+void VescUart::setSpeed(float erpm, uint8_t canId) {
+  // ESP_LOGD("VescUart", "VescUart::setSpeed called with erpm: %.0f, canId: %d", erpm, canId);
   int32_t index = 0;
   int payloadSize = (canId == 0 ? 5 : 7);
   uint8_t payload[payloadSize];
@@ -355,7 +355,7 @@ void VescUart::setRPM(float rpm, uint8_t canId) {
     payload[index++] = canId;
   }
   payload[index++] = {COMM_SET_RPM};
-  buffer_append_int32(payload, (int32_t) (rpm), &index);
+  buffer_append_int32(payload, (int32_t) (erpm), &index);
   packSendPayload(payload, payloadSize);
 }
 

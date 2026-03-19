@@ -42,7 +42,7 @@ class VescUart {
     float avgMotorCurrent;
     float avgInputCurrent;
     float dutyCycleNow;
-    float rpm;
+    float speed;
     float inpVoltage;
     float ampHours;
     float ampHoursCharged;
@@ -60,7 +60,7 @@ class VescUart {
 
   void setSerialPort(Stream *port);
   void setDebugPort(Stream *port);
-  void setRPM(float rpm, uint8_t canId = 0);
+  void setSpeed(float erpm, uint8_t canId = 0);
   void setDuty(float duty, uint8_t canId = 0);
   void setCurrent(float current, uint8_t canId = 0);
   void sendKeepalive(uint8_t canId = 0);

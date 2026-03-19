@@ -5,15 +5,15 @@ from esphome.const import CONF_MAX_VALUE, CONF_MIN_VALUE, CONF_STEP
 
 from . import CONF_VESC_ID, VescComponent, vesc_component_ns
 
-VescControlRpm = vesc_component_ns.class_("VescControlRpm", number.Number)
+VescControlSpeed = vesc_component_ns.class_("VescControlSpeed", number.Number)
 VescControlDuty = vesc_component_ns.class_("VescControlDuty", number.Number)
 VescControlCurrent = vesc_component_ns.class_("VescControlCurrent", number.Number)
 
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_VESC_ID): cv.use_id(VescComponent),
-        cv.Optional("rpm_control"): number.number_schema(
-            VescControlRpm,
+        cv.Optional("speed_control"): number.number_schema(
+            VescControlSpeed,
         ).extend(
             {
                 cv.Optional("min_value", default=-500.0): cv.float_,
@@ -47,7 +47,7 @@ async def to_code(config):
     var = await cg.get_variable(config[CONF_VESC_ID])
 
     for key, setter in [
-        ("rpm_control", var.set_rpm_control),
+        ("speed_control", var.set_speed_control),
         ("current_control", var.set_current_control),
         ("duty_control", var.set_duty_control),
     ]:

@@ -49,7 +49,7 @@ class VescControl : public number::Number {
   uint32_t last_update = 0;
 };
 
-class VescControlRpm : public VescControl {};
+class VescControlSpeed : public VescControl {};
 class VescControlDuty : public VescControl {};
 class VescControlCurrent : public VescControl {};
 
@@ -113,7 +113,7 @@ class VescComponent : public PollingComponent {
 
  protected:
   sensor::Sensor *voltage_sensor_{nullptr};
-  sensor::Sensor *rpm_sensor_{nullptr};
+  sensor::Sensor *speed_sensor_{nullptr};
   sensor::Sensor *duty_sensor_{nullptr};
   sensor::Sensor *input_current_sensor_{nullptr};
   sensor::Sensor *phase_current_sensor_{nullptr};
@@ -124,7 +124,7 @@ class VescComponent : public PollingComponent {
   text_sensor::TextSensor *fault_text_sensor_{nullptr};
   text_sensor::TextSensor *lisp_print_sensor_{nullptr};
 
-  VescControlRpm *rpm_control_{nullptr};
+  VescControlSpeed *speed_control_{nullptr};
   VescControlDuty *duty_control_{nullptr};
   VescControlCurrent *current_control_{nullptr};
 
@@ -225,23 +225,23 @@ class VescComponent : public PollingComponent {
     // Rate limit outgoing commands to at most 4 Hz to avoid
     // overwhelming the VESC or the serial connection
     if (now - this->last_command_send_time_ > 250) {
-      if (this->get_target_rpm() > 10.0f) {  // Small deadzone
-        this->control_mode_ = 'R';
-        this->send_rpm_command();
+      if (this->get_target_speed() > 10.0f) {  // Small deadzone
+        this->control_mode_ = 'S';
+        this->send_speed_command();
         // Clear duty cycle and current to avoid conflicts
         this->set_target_duty(0.0f, false);
         this->set_target_current(0.0f, false);
       } else if (this->get_target_duty() > 0.01f) {  // Small deadzone
         this->control_mode_ = 'D';
         this->send_duty_command();
-        // Clear RPM and current to avoid conflicts
-        this->set_target_rpm(0.0f, false);
+        // Clear speed and current to avoid conflicts
+        this->set_target_speed(0.0f, false);
         this->set_target_current(0.0f, false);
       } else if (this->get_target_current() > 0.01f) {  // Small deadzone
         this->control_mode_ = 'C';
         this->send_current_command();
-        // Clear RPM and duty cycle to avoid conflicts
-        this->set_target_rpm(0.0f, false);
+        // Clear speed and duty cycle to avoid conflicts
+        this->set_target_speed(0.0f, false);
         this->set_target_duty(0.0f, false);
       } else {
         this->control_mode_ = 'N';
@@ -257,7 +257,7 @@ class VescComponent : public PollingComponent {
     static uint32_t boost_start = 0;
 
     if (this->boost_duration_ && this->boost_interval_ &&
-        ((this->rpm_control_ && (now - this->rpm_control_->last_update < this->boost_duration_)) ||
+        ((this->speed_control_ && (now - this->speed_control_->last_update < this->boost_duration_)) ||
          (this->current_control_ && (now - this->current_control_->last_update < this->boost_duration_)) ||
          (this->duty_control_ && (now - this->duty_control_->last_update < this->boost_duration_)))) {
       // ESP_LOGD(TAG, "a control has been updated");
@@ -300,11 +300,11 @@ class VescComponent : public PollingComponent {
     static bool first_publish = true;
 
     // ESP_LOGD(TAG, "Publishing");
-    float mrpm = this->latest_data.rpm / this->motor_pole_pairs_;
+    float mrpm = this->latest_data.speed / this->motor_pole_pairs_;
     if (this->voltage_sensor_)
       this->voltage_sensor_->publish_state(this->latest_data.inpVoltage);
-    if (this->rpm_sensor_)
-      this->rpm_sensor_->publish_state(round(mrpm));
+    if (this->speed_sensor_)
+      this->speed_sensor_->publish_state(round(mrpm));
     if (this->duty_sensor_)
       this->duty_sensor_->publish_state(this->latest_data.dutyCycleNow);
     if (this->input_current_sensor_)
@@ -346,8 +346,8 @@ class VescComponent : public PollingComponent {
       }
     }
 
-    if (this->rpm_control_)
-      this->rpm_control_->publish_state(round(mrpm));
+    if (this->speed_control_)
+      this->speed_control_->publish_state(round(mrpm));
     if (this->duty_control_)
       this->duty_control_->publish_state(this->latest_data.dutyCycleNow);
     if (this->current_control_)
@@ -404,7 +404,7 @@ class VescComponent : public PollingComponent {
   void set_boost_duration(uint32_t i) { this->boost_duration_ = i; }
 
   void set_voltage_sensor(sensor::Sensor *s) { voltage_sensor_ = s; }
-  void set_rpm_sensor(sensor::Sensor *s) { rpm_sensor_ = s; }
+  void set_speed_sensor(sensor::Sensor *s) { speed_sensor_ = s; }
   void set_duty_sensor(sensor::Sensor *s) { duty_sensor_ = s; }
   void set_input_current_sensor(sensor::Sensor *s) { input_current_sensor_ = s; }
   void set_phase_current_sensor(sensor::Sensor *s) { phase_current_sensor_ = s; }
@@ -415,7 +415,7 @@ class VescComponent : public PollingComponent {
   void set_lisp_print_sensor(text_sensor::TextSensor *s) { lisp_print_sensor_ = s; }
   void set_control_mode_sensor(text_sensor::TextSensor *s) { control_mode_sensor_ = s; }
 
-  void set_rpm_control(VescControlRpm *n) { rpm_control_ = n; }
+  void set_speed_control(VescControlSpeed *n) { speed_control_ = n; }
   void set_duty_control(VescControlDuty *n) { duty_control_ = n; }
   void set_current_control(VescControlCurrent *n) { current_control_ = n; }
 
@@ -426,12 +426,12 @@ class VescComponent : public PollingComponent {
   }
 #endif
 
-  void send_rpm_command() {
-    if (!this->rpm_control_)  // not defined in yaml
+  void send_speed_command() {
+    if (!this->speed_control_)  // not defined in yaml
       return;
-    float erpm = rpm_control_->target * motor_pole_pairs_;
-    // ESP_LOGD(TAG, "Sending RPM command: %.0f ERPM (%.0f mRPM)", erpm, get_target_rpm());
-    this->vesc.setRPM(erpm);
+    float erpm = speed_control_->target * motor_pole_pairs_;
+    // ESP_LOGD(TAG, "Sending speed command: %.0f ERPM (%.0f mRPM)", erpm, get_target_rpm());
+    this->vesc.setSpeed(erpm);
   }
 
   void send_duty_command() {
@@ -456,7 +456,7 @@ class VescComponent : public PollingComponent {
 
     VescControl *ctrl = nullptr;
     if (this->control_mode_ == 'R' || this->control_mode_ == 'N')
-      ctrl = (VescControl *) rpm_control_;
+      ctrl = (VescControl *) speed_control_;
     else if (this->control_mode_ == 'C')
       ctrl = (VescControl *) current_control_;
     else if (this->control_mode_ == 'D')
@@ -468,11 +468,11 @@ class VescComponent : public PollingComponent {
   }
 
   void stop() {
-    this->set_target_rpm(0.0f);
+    this->set_target_speed(0.0f);
     this->set_target_current(0.0f);
     this->set_target_duty(0.0f);
     this->vesc.setCurrent(0.0f);
-    this->vesc.setRPM(0.0f);
+    this->vesc.setSpeed(0.0f);
     this->vesc.setDuty(0.0f);
   }
 
@@ -491,21 +491,21 @@ class VescComponent : public PollingComponent {
   uint32_t boost_duration_ = 5000;  // default 5s
 
   uint32_t last_command_send_time_{0};
-  char control_mode_ = 'N';  // R: RPM, D: Duty Cycle, C: Current, N: None
+  char control_mode_ = 'N';  // S: Speed, D: Duty Cycle, C: Current, N: None
 
-  float get_target_rpm() {
-    if (!this->rpm_control_)
+  float get_target_speed() {
+    if (!this->speed_control_)
       return 0.0f;
-    return this->rpm_control_->target;
+    return this->speed_control_->target;
   }
-  void set_target_rpm(float v, bool set_updated_flag = true) {
-    // ESP_LOGD(TAG, "set_target_rpm(%.2f)", v);
-    if (!this->rpm_control_)
+  void set_target_speed(float v, bool set_updated_flag = true) {
+    // ESP_LOGD(TAG, "set_target_speed(%.2f)", v);
+    if (!this->speed_control_)
       return;
     if (set_updated_flag)
-      this->rpm_control_->control(v);
+      this->speed_control_->control(v);
     else
-      this->rpm_control_->target = v;
+      this->speed_control_->target = v;
   }
   float get_target_current() {
     if (!this->current_control_)

@@ -56,9 +56,9 @@ sensor:
       icon: mdi:lightning-bolt
       filters:
         - delta: 0.1
-    rpm:
+    speed:
       name: "Speed"
-      id: vesc_rpm
+      id: vesc_speed
       icon: mdi:speedomether
       filters:
         - delta: 0.5
@@ -122,9 +122,9 @@ text_sensor:
 number:
   - platform: vesc_component
     vesc_id: my_vesc_hub
-    rpm_control:
+    speed_control:
       name: "Motor Target Speed"
-      id: rpm_slider
+      id: speed_slider
       min_value: 0
       max_value: 410
       step: 1

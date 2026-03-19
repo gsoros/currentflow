@@ -14,7 +14,7 @@ CONFIG_SCHEMA = cv.Schema(
             icon="mdi:flash-triangle-outline",
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional("rpm"): sensor.sensor_schema(
+        cv.Optional("speed"): sensor.sensor_schema(
             unit_of_measurement="RPM",
             icon="mdi:rotate-360",
             accuracy_decimals=0,
@@ -65,9 +65,9 @@ async def to_code(config):
     if "voltage" in config:
         sens = await sensor.new_sensor(config["voltage"])
         cg.add(var.set_voltage_sensor(sens))
-    if "rpm" in config:
-        sens = await sensor.new_sensor(config["rpm"])
-        cg.add(var.set_rpm_sensor(sens))
+    if "speed" in config:
+        sens = await sensor.new_sensor(config["speed"])
+        cg.add(var.set_speed_sensor(sens))
     if "duty" in config:
         sens = await sensor.new_sensor(config["duty"])
         cg.add(var.set_duty_sensor(sens))
