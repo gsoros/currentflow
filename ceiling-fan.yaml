@@ -90,9 +90,9 @@ sensor:
       icon: mdi:thermometer
       filters:
         - delta: 0.2
-    wattage:
+    power:
       name: "Power"
-      id: vesc_wattage
+      id: vesc_power
       icon: mdi:arm-flex
       filters:
         - delta: 0.005

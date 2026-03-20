@@ -122,7 +122,7 @@ class VescComponent : public PollingComponent {
   sensor::Sensor *input_current_sensor_{nullptr};
   sensor::Sensor *phase_current_sensor_{nullptr};
   sensor::Sensor *fet_temp_sensor_{nullptr};
-  sensor::Sensor *wattage_sensor_{nullptr};
+  sensor::Sensor *power_sensor_{nullptr};
   sensor::Sensor *fault_code_sensor_{nullptr};
   text_sensor::TextSensor *control_mode_sensor_{nullptr};
   text_sensor::TextSensor *fault_text_sensor_{nullptr};
@@ -316,8 +316,8 @@ class VescComponent : public PollingComponent {
       this->phase_current_sensor_->publish_state(this->latest_data.avgMotorCurrent);
     if (this->fet_temp_sensor_)
       this->fet_temp_sensor_->publish_state(this->latest_data.tempMosfet);
-    if (this->wattage_sensor_)
-      this->wattage_sensor_->publish_state(this->latest_data.inpVoltage * latest_data.avgInputCurrent);
+    if (this->power_sensor_)
+      this->power_sensor_->publish_state(this->latest_data.inpVoltage * latest_data.avgInputCurrent);
     if (this->fault_code_sensor_)
       this->fault_code_sensor_->publish_state(this->latest_data.error);
     if (this->fault_text_sensor_) {
@@ -410,7 +410,7 @@ class VescComponent : public PollingComponent {
   void set_input_current_sensor(sensor::Sensor *s) { input_current_sensor_ = s; }
   void set_phase_current_sensor(sensor::Sensor *s) { phase_current_sensor_ = s; }
   void set_fet_temp_sensor(sensor::Sensor *s) { fet_temp_sensor_ = s; }
-  void set_wattage_sensor(sensor::Sensor *s) { wattage_sensor_ = s; }
+  void set_power_sensor(sensor::Sensor *s) { power_sensor_ = s; }
   void set_fault_code_sensor(sensor::Sensor *s) { fault_code_sensor_ = s; }
   void set_fault_text_sensor(text_sensor::TextSensor *s) { fault_text_sensor_ = s; }
   void set_lisp_print_sensor(text_sensor::TextSensor *s) { lisp_print_sensor_ = s; }

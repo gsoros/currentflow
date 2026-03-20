@@ -44,7 +44,7 @@ CONFIG_SCHEMA = cv.Schema(
             accuracy_decimals=1,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
-        cv.Optional("wattage"): sensor.sensor_schema(
+        cv.Optional("power"): sensor.sensor_schema(
             unit_of_measurement=UNIT_WATT,
             icon="mdi:arm-flex",
             accuracy_decimals=3,
@@ -80,9 +80,9 @@ async def to_code(config):
     if "fet_temp" in config:
         sens = await sensor.new_sensor(config["fet_temp"])
         cg.add(var.set_fet_temp_sensor(sens))
-    if "wattage" in config:
-        sens = await sensor.new_sensor(config["wattage"])
-        cg.add(var.set_wattage_sensor(sens))
+    if "power" in config:
+        sens = await sensor.new_sensor(config["power"])
+        cg.add(var.set_power_sensor(sens))
     if "fault_code" in config:
         sens = await sensor.new_sensor(config["fault_code"])
         cg.add(var.set_fault_code_sensor(sens))
