@@ -36,11 +36,11 @@ class VescControl : public number::Number {
   }
 
   void control(float v) override {
-    if (v == this->target)
+    if (std::abs(v - this->target) < 0.001f)
       return;
     // When control() is called by call.perform(), bounds are checked.
     // We check them here so we can also call control() directly.
-    v = clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
+    v = std::clamp(v, this->traits.get_min_value(), this->traits.get_max_value());
     this->target = v;
     this->last_update = millis();
   }
@@ -105,11 +105,15 @@ class UARTComponentStream : public Stream {
 
 class VescComponent : public PollingComponent {
  public:
+  static constexpr uint16_t MIN_COMMAND_DELAY = 250;
+  static constexpr uint16_t BUFFER_THRESHOLD = 200;
+  static constexpr uint16_t BUFFER_DISCARD = 128;
+  static constexpr uint16_t BOOT_WAIT = 5000;
+
   VescUart vesc{30};  // default 30ms timeout for UART responses
 
   VescUart::dataPackage latest_data;
   unsigned long latest_data_time = 0;
-  bool data_ready_ = false;
 
  protected:
   sensor::Sensor *voltage_sensor_{nullptr};
@@ -130,8 +134,9 @@ class VescComponent : public PollingComponent {
 
   int motor_pole_pairs_ = 10;
   float step_percent_ = 1.0f;  // step to use in faster() and slower()
-  ulong setup_done = 0;
+  ulong setup_done_ = 0;
   uint32_t update_interval_from_config_ = 2000;
+  bool data_ready_ = false;
 
  public:
   void setup() override {
@@ -154,7 +159,7 @@ class VescComponent : public PollingComponent {
     this->update_interval_from_config_ = this->update_interval_;
     this->set_update_interval(UINT32_MAX);
 
-    this->setup_done = millis();
+    this->setup_done_ = millis();
   }
 
   void loop() override {
@@ -173,8 +178,8 @@ class VescComponent : public PollingComponent {
     }
 
     static bool first_loop = true;
-    if (first_loop && (now - this->setup_done < 5000)) {
-      // Wait 5 seconds after setup before trying to read, to give the VESC time to boot up and
+    if (first_loop && (now - this->setup_done_ < BOOT_WAIT)) {
+      // Wait after setup before trying to read, to give the VESC time to boot up and
       // respond, and the WiFi connection become established.
       static uint32_t vesc_wait_log_last = 0;
       if (now - vesc_wait_log_last >= 1000) {  // rate limit logs to 1 per second
@@ -196,14 +201,12 @@ class VescComponent : public PollingComponent {
     // Reasons:
     // - Unbounded drains can block the loop and cause watchdog resets.
     // - `flush()` only affects TX, not RX, so we must read to clear RX.
-    // Strategy: discard up to `max_discard` bytes (128) per loop,
-    // then reset the VESC parser state so parsing resumes at the next
-    // valid start byte.
+    // Strategy: discard up to `BUFFER_DISCARD` bytes per loop, then reset
+    // the VESC parser state so parsing resumes at the next valid start byte.
     size_t avail = (this->uart_adapter_ ? this->uart_adapter_->available() : 0);
-    const size_t max_discard = 128;
-    if (avail > 200) {
+    if (avail > BUFFER_THRESHOLD) {
       if (this->uart_adapter_) {
-        size_t to_discard = (avail > max_discard) ? max_discard : avail;
+        size_t to_discard = (avail > BUFFER_DISCARD) ? BUFFER_DISCARD : avail;
         for (size_t i = 0; i < to_discard && this->uart_adapter_->available(); ++i)
           this->uart_adapter_->read();
         // Reset parser so we don't attempt to interpret leftover
@@ -222,22 +225,22 @@ class VescComponent : public PollingComponent {
       this->data_ready_ = true;
     }
 
-    // Rate limit outgoing commands to at most 4 Hz to avoid
+    // Rate limit outgoing commands to avoid
     // overwhelming the VESC or the serial connection
-    if (now - this->last_command_send_time_ > 250) {
-      if (this->get_target_speed() > 10.0f) {  // Small deadzone
+    if (now - this->last_command_send_time_ > MIN_COMMAND_DELAY) {
+      if (std::fabs(this->get_target_speed()) > 10.0f) {  // Small deadzone
         this->control_mode_ = 'S';
         this->send_speed_command();
         // Clear duty cycle and current to avoid conflicts
         this->set_target_duty(0.0f, false);
         this->set_target_current(0.0f, false);
-      } else if (this->get_target_duty() > 0.01f) {  // Small deadzone
+      } else if (std::fabs(this->get_target_duty()) > 0.01f) {  // Small deadzone
         this->control_mode_ = 'D';
         this->send_duty_command();
         // Clear speed and current to avoid conflicts
         this->set_target_speed(0.0f, false);
         this->set_target_current(0.0f, false);
-      } else if (this->get_target_current() > 0.01f) {  // Small deadzone
+      } else if (std::fabs(this->get_target_current()) > 0.01f) {  // Small deadzone
         this->control_mode_ = 'C';
         this->send_current_command();
         // Clear speed and duty cycle to avoid conflicts
@@ -304,7 +307,7 @@ class VescComponent : public PollingComponent {
     if (this->voltage_sensor_)
       this->voltage_sensor_->publish_state(this->latest_data.inpVoltage);
     if (this->speed_sensor_)
-      this->speed_sensor_->publish_state(round(mrpm));
+      this->speed_sensor_->publish_state(std::round(mrpm));
     if (this->duty_sensor_)
       this->duty_sensor_->publish_state(this->latest_data.dutyCycleNow);
     if (this->input_current_sensor_)
@@ -317,8 +320,6 @@ class VescComponent : public PollingComponent {
       this->wattage_sensor_->publish_state(this->latest_data.inpVoltage * latest_data.avgInputCurrent);
     if (this->fault_code_sensor_)
       this->fault_code_sensor_->publish_state(this->latest_data.error);
-    if (this->fault_code_sensor_)
-      this->fault_code_sensor_->publish_state(this->latest_data.error);
     if (this->fault_text_sensor_) {
       if (first_publish)
         this->fault_text_sensor_->publish_state(
@@ -327,7 +328,7 @@ class VescComponent : public PollingComponent {
         this->fault_text_sensor_->publish_state(mc_fault_code_to_string(this->latest_data.error));
     }
     if (this->lisp_print_sensor_) {
-      if (!strlen(this->latest_data.lispPrint)) {
+      if (!std::strlen(this->latest_data.lispPrint)) {
         if (first_publish)
           this->lisp_print_sensor_->publish_state("");
       } else {
@@ -347,7 +348,7 @@ class VescComponent : public PollingComponent {
     }
 
     if (this->speed_control_)
-      this->speed_control_->publish_state(round(mrpm));
+      this->speed_control_->publish_state(std::round(mrpm));
     if (this->duty_control_)
       this->duty_control_->publish_state(this->latest_data.dutyCycleNow);
     if (this->current_control_)
@@ -391,7 +392,7 @@ class VescComponent : public PollingComponent {
   }
 
   void set_motor_pole_pairs(float f) {
-    uint16_t mpp = (uint16_t) clamp(f, 0.0f, (float) UINT16_MAX);
+    uint16_t mpp = (uint16_t) std::clamp(f, 0.0f, (float) UINT16_MAX);
     if (mpp <= 0) {
       ESP_LOGE(TAG, "not setting 0 pole pairs");
       return;
@@ -455,7 +456,7 @@ class VescComponent : public PollingComponent {
       return;
 
     VescControl *ctrl = nullptr;
-    if (this->control_mode_ == 'R' || this->control_mode_ == 'N')
+    if (this->control_mode_ == 'S' || this->control_mode_ == 'N')
       ctrl = (VescControl *) speed_control_;
     else if (this->control_mode_ == 'C')
       ctrl = (VescControl *) current_control_;
@@ -493,7 +494,7 @@ class VescComponent : public PollingComponent {
   uint32_t last_command_send_time_{0};
   char control_mode_ = 'N';  // S: Speed, D: Duty Cycle, C: Current, N: None
 
-  float get_target_speed() {
+  float get_target_speed() const {
     if (!this->speed_control_)
       return 0.0f;
     return this->speed_control_->target;
@@ -507,7 +508,7 @@ class VescComponent : public PollingComponent {
     else
       this->speed_control_->target = v;
   }
-  float get_target_current() {
+  float get_target_current() const {
     if (!this->current_control_)
       return 0.0f;
     return this->current_control_->target;
@@ -520,7 +521,7 @@ class VescComponent : public PollingComponent {
     else
       this->current_control_->target = v;
   }
-  float get_target_duty() {
+  float get_target_duty() const {
     if (!this->duty_control_)
       return 0.0f;
     return this->duty_control_->target;

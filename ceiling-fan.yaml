@@ -131,7 +131,7 @@ number:
     speed_control:
       name: "Motor Target Speed"
       id: speed_slider
-      min_value: 0
+      min_value: -200
       max_value: 410
       step: 1
       unit_of_measurement: "RPM"
@@ -140,7 +140,7 @@ number:
     current_control:
       name: "Motor Target Current"
       id: current_slider
-      min_value: 0
+      min_value: -1.0
       max_value: 2.8
       step: 0.028
       unit_of_measurement: "A"
@@ -149,7 +149,7 @@ number:
     duty_control:
       name: "Motor Target Duty Cycle"
       id: duty_slider
-      min_value: 0
+      min_value: -0.2
       max_value: 0.5
       step: 0.005
       unit_of_measurement: "%"
