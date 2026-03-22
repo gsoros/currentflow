@@ -104,8 +104,8 @@ sensor:
     voltage:
       name: "Input Voltage"
 
-    rpm:
-      name: "RPM"
+    speed:
+      name: "Speed"
 
     duty:
       name: "Duty Cycle"
@@ -119,8 +119,8 @@ sensor:
     fet_temp:
       name: "FET Temperature"
 
-    wattage:
-      name: "Wattage"
+    power:
+      name: "Power"
 
     fault_code:
       name: "Fault Code"
@@ -131,12 +131,12 @@ sensor:
 | Sensor        | Description                     |
 | ------------- | ------------------------------- |
 | Voltage       | DC input voltage                |
-| RPM           | Mechanical motor RPM            |
+| Speed         | Mechanical motor RPM            |
 | Duty          | PWM duty cycle                  |
 | Input Current | Current drawn from supply       |
 | Phase Current | Motor phase current             |
 | FET Temp      | Temperature of the MOSFET stage |
-| Wattage       | Calculated power consumption    |
+| Power         | Calculated power consumption    |
 | Fault Code    | Raw numeric VESC fault code     |
 
 ---
@@ -164,7 +164,7 @@ text_sensor:
 
 | Sensor       | Description                               |
 | ------------ | ----------------------------------------- |
-| Control Mode | Current control mode (`R`, `D`, `C`, `N`) |
+| Control Mode | Current control mode (`S`, `D`, `C`, `N`) |
 | Fault Text   | Human-readable fault description          |
 | Lisp Output  | Messages printed from VESC Lisp scripts   |
 
@@ -183,8 +183,8 @@ number:
   - platform: vesc_component
     vesc_id: my_vesc_hub
 
-    rpm_control:
-      name: "Motor Target RPM"
+    speed_control:
+      name: "Motor Target Speed"
       min_value: -100
       max_value: 410
       step: 1
@@ -206,7 +206,7 @@ number:
 
 | Mode    | Description           |
 | ------- | --------------------- |
-| RPM     | Target mechanical RPM |
+| Speed   | Target mechanical RPM |
 | Current | Target motor current  |
 | Duty    | Raw duty cycle        |
 
@@ -289,7 +289,7 @@ ESP -.UART paused when BLE active.- BLE
 
 ### Notes
 
-`motor_pole_pairs` affects how RPM is reported:
+`motor_pole_pairs` affects how speed is reported:
 
 ```
 mechanical_rpm = erpm / motor_pole_pairs
@@ -308,12 +308,12 @@ sensor:
 | Option          | Description                      |
 | --------------- | -------------------------------- |
 | `voltage`       | VESC input voltage               |
-| `rpm`           | Mechanical motor RPM             |
+| `speed`         | Mechanical motor RPM             |
 | `duty`          | PWM duty cycle                   |
 | `input_current` | Current drawn from the DC source |
 | `phase_current` | Motor phase current              |
 | `fet_temp`      | MOSFET temperature               |
-| `wattage`       | Calculated power consumption     |
+| `power`         | Calculated power consumption     |
 | `fault_code`    | Raw VESC fault code              |
 
 ---
@@ -327,7 +327,7 @@ number:
 
 | Entity            | Description           |
 | ----------------- | --------------------- |
-| `rpm_control`     | Target mechanical RPM |
+| `speed_control`   | Target mechanical RPM |
 | `current_control` | Target motor current  |
 | `duty_control`    | Target duty cycle     |
 
@@ -342,7 +342,7 @@ step
 Example:
 
 ```yaml
-rpm_control:
+speed_control:
   name: "Fan RPM"
   min_value: -100
   max_value: 410
@@ -360,7 +360,7 @@ text_sensor:
 
 | Entity         | Description                                 |
 | -------------- | ------------------------------------------- |
-| `control_mode` | Active control mode (`R`, `C`, `D`, or `N`) |
+| `control_mode` | Active control mode (`S`, `C`, `D`, or `N`) |
 | `fault_text`   | Human-readable VESC fault description       |
 | `lisp_print`   | Output printed from VESC Lisp scripts       |
 
@@ -370,7 +370,7 @@ text_sensor:
 
 This project was originally built to monitor and control a **VESC-driven ceiling fan** from Home Assistant.
 
-The ESP32 communicates with the VESC over UART and exposes telemetry such as RPM, power consumption, and temperature. Fan speed can be controlled directly from the Home Assistant UI.
+The ESP32 communicates with the VESC over UART and exposes telemetry such as speed, power consumption, and temperature. Fan speed can be controlled directly from the Home Assistant UI.
 
 Example configuration:
 
@@ -402,7 +402,7 @@ sensor:
     voltage:
       name: "Fan Supply Voltage"
 
-    rpm:
+    speed:
       name: "Fan RPM"
 
     wattage:
@@ -415,7 +415,7 @@ number:
   - platform: vesc_component
     vesc_id: my_vesc_hub
 
-    rpm_control:
+    speed_control:
       name: "Fan Speed"
       min_value: 0
       max_value: 410
@@ -424,7 +424,7 @@ number:
 
 This exposes:
 
-* live **fan RPM**
+* live **fan speed**
 * **power consumption**
 * **VESC temperature**
 * a **speed control slider** in Home Assistant
