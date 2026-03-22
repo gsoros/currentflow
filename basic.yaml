@@ -32,9 +32,9 @@ sensor:
     vesc_id: my_vesc_hub
     voltage:
       name: "Supply Voltage"
-    rpm:
+    speed:
       name: "Speed"
-    wattage:
+    power:
       name: "Power"
     fet_temp:
       name: "VESC Temperature"
@@ -42,7 +42,7 @@ sensor:
 number:
   - platform: vesc_component
     vesc_id: my_vesc_hub
-    rpm_control:
+    speed_control:
       name: "Target Speed"
       min_value: 0
       max_value: 410
