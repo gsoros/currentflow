@@ -45,8 +45,9 @@ void BleUartComponent::setup() {
   rx_char_ = nus->createCharacteristic(NUS_RX_CHAR_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
   rx_char_->setCallbacks(&rx_callbacks_);
 
-  if (!nus->start())
-    ESP_LOGE(TAG, "NUS start failed");
+  // if (!nus->start()) // deprecated: NimBLEService::start() has no effect. Services are started when the server is
+  // started.
+  //  ESP_LOGE(TAG, "NUS start failed");
 
   // Advertise so VESC Tool (or any NUS scanner) can find us
   auto adv = ble_server_->getAdvertising();

@@ -102,7 +102,6 @@ sensor:
     name: "Ceiling Temperature"
     update_interval: 10s
 
-
 text_sensor:
   - platform: vesc_component
     vesc_id: my_vesc_hub
@@ -244,7 +243,8 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    encryption:
+    # password: !secret ota_password
 
 wifi:
   ssid: !secret wifi_ssid

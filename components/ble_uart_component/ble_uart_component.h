@@ -203,7 +203,7 @@ class BleUartComponent : public Component, public uart::UARTDevice {
     uint8_t dummy;
     while (count++ && this->available())
       this->read_byte(&dummy);
-    ESP_LOGD(TAG, "Flushed %d bytes from UART incoming buffer in %d ms", count, millis() - now);
+    ESP_LOGD(TAG, "Flushed %d bytes from UART incoming buffer in %ld ms", count, millis() - now);
   }
 };
 
